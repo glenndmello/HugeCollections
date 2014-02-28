@@ -41,15 +41,16 @@ public class SharedHashMapTutorial {
     public static void byteableDemo() throws Exception {
         final int entries = 10;
 
-        SharedHashMap<Integer, NativeLongValue> map =
+        SharedHashMap<Integer, LongValue> map =
             new SharedHashMapBuilder()
                 .entries(entries)
                 .segments(128)
                 .entrySize(24)
+                .generatedValueType(true)
                 .create(
                     getPersistenceFile(),
                     Integer.class,
-                    NativeLongValue.class);
+                    LongValue.class);
 
         // Acquire a value for the given key, as the map is empty, the key will
         // be created and space is allocated to hold the data (max 24 bytes).
