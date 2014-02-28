@@ -25,6 +25,7 @@
     <version>2.0.1-SNAPSHOT</version>
     <modules>
         <module>collections</module>
+        <module>collections-tutorial</module>
     </modules>
     <packaging>pom</packaging>
 
