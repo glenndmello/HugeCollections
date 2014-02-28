@@ -17,11 +17,12 @@
 package net.openhft.collections;
 
 import net.openhft.lang.Maths;
+import net.openhft.lang.collection.DirectBitSet;
+import net.openhft.lang.collection.SingleThreadedDirectBitSet;
 import net.openhft.lang.io.*;
 import net.openhft.lang.io.serialization.BytesMarshallable;
 import net.openhft.lang.model.Byteable;
-import net.openhft.lang.sandbox.collection.ATSDirectBitSet;
-import net.openhft.lang.sandbox.collection.DirectBitSet;
+import net.openhft.lang.model.DataValueClasses;
 
 import java.util.AbstractMap;
 import java.util.Set;
@@ -191,7 +192,7 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
         private final NativeBytes bytes;
         private final MultiStoreBytes tmpBytes = new MultiStoreBytes();
         private final IntIntMultiMap hashLookup;
-        private final ATSDirectBitSet freeList;
+        private final SingleThreadedDirectBitSet freeList;
         private final long entriesOffset;
         private int nextSet = 0;
 
@@ -206,7 +207,7 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
             long bsSize = (builder.entriesPerSegment() + 63) / 64 * 8;
             NativeBytes bsBytes = new NativeBytes(tmpBytes.bytesMarshallerFactory(), start, start + bsSize, null);
 //            bsBytes.load();
-            freeList = new ATSDirectBitSet(bsBytes);
+            freeList = new SingleThreadedDirectBitSet(bsBytes);
             start += bsSize * (1 + builder.replicas());
             entriesOffset = start - bytes.startAddr();
             assert bytes.capacity() >= entriesOffset + builder.entriesPerSegment() * builder.entrySize();
@@ -247,7 +248,12 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
                     } else {
                         long offset = entriesOffset + pos * builder.entrySize();
                         tmpBytes.storePositionAndSize(bytes, offset, builder.entrySize());
-                        if (!keyEquals(keyBytes, tmpBytes))
+                        long start0 = System.nanoTime();
+                        boolean miss = !keyEquals(keyBytes, tmpBytes);
+                        long time0 = System.nanoTime() - start0;
+                        if (time0 > 1e6)
+                            System.out.println("startsWith took " + time0 / 100000 / 10.0 + " ms.");
+                        if (miss)
                             continue;
                         long keyLength = align(keyBytes.remaining() + tmpBytes.position()); // includes the stop bit length.
                         tmpBytes.position(keyLength);
@@ -306,6 +312,12 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
         private V readObjectUsing(V value, long offset) {
             if (value instanceof Byteable) {
                 ((Byteable) value).bytes(bytes, offset);
+                return value;
+            }
+            if (builder.generatedValueType()) {
+                if (value == null)
+                    value = DataValueClasses.newInstance(vClass);
+                ((BytesMarshallable) value).readMarshallable(tmpBytes);
                 return value;
             }
             return tmpBytes.readInstance(vClass, value);
