@@ -31,7 +31,7 @@ public class SharedHashMapBuilder implements Cloneable {
     private static final byte[] MAGIC = "SharedHM".getBytes();
     private static final double INCREASE_ENTRIES_PER_SECTOR = 1.5;
     private int segments = 128;
-    private int entrySize = 128;
+    private int entrySize = 256;
     private long entries = 1 << 20;
     private int replicas = 0;
     private boolean transactional = false;
@@ -39,6 +39,8 @@ public class SharedHashMapBuilder implements Cloneable {
     private SharedMapErrorListener errorListener = SharedMapErrorListeners.LOGGING;
     private boolean putReturnsNull = false;
     private boolean removeReturnsNull = false;
+    private boolean generatedKeyType = false;
+    private boolean generatedValueType = false;
 
 
     public SharedHashMapBuilder segments(int segments) {
@@ -98,11 +100,11 @@ public class SharedHashMapBuilder implements Cloneable {
     public <K, V> SharedHashMap<K, V> create(File file, Class<K> kClass, Class<V> vClass) throws IOException {
         SharedHashMapBuilder builder = null;
         for (int i = 0; i < 10; i++) {
-            if (file.exists()) {
+            if (file.exists() && file.length() > 0) {
                 builder = readFile(file);
                 break;
             }
-            if (file.createNewFile()) {
+            if (file.createNewFile() || file.length() == 0) {
                 newFile(file);
                 builder = clone();
                 break;
@@ -208,5 +210,23 @@ public class SharedHashMapBuilder implements Cloneable {
 
     public boolean removeReturnsNull() {
         return removeReturnsNull;
+    }
+
+    public boolean generatedKeyType() {
+        return generatedKeyType;
+    }
+
+    public SharedHashMapBuilder generatedKeyType(boolean generatedKeyType) {
+        this.generatedKeyType = generatedKeyType;
+        return this;
+    }
+
+    public boolean generatedValueType() {
+        return generatedValueType;
+    }
+
+    public SharedHashMapBuilder generatedValueType(boolean generatedValueType) {
+        this.generatedValueType = generatedValueType;
+        return this;
     }
 }
