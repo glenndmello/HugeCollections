@@ -64,9 +64,16 @@ public class SharedHashMapTutorial {
             new NativeLongValue()  // the value (Byteable)
         );
 
-        // v2 will be a brand new object as the value parameter is null
+        // v2 will be a brand new on-heap object as the value parameter is null
         LongValue v2 = map.acquireUsing(
             1,   // the key
+            null // the value
+        );
+
+        // v3 will be a brand and empty (key was not defined before) new on-heap
+        // object as the value parameter is null
+        LongValue v3 = map.acquireUsing(
+            2,   // the key
             null // the value
         );
 
