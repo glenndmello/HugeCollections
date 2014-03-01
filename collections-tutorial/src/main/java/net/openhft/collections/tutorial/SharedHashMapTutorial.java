@@ -17,6 +17,7 @@ package net.openhft.collections.tutorial;
 
 import net.openhft.collections.SharedHashMap;
 import net.openhft.collections.SharedHashMapBuilder;
+import net.openhft.collections.tutorial.values.MyDataType;
 import net.openhft.collections.tutorial.values.NativeLongValue;
 import net.openhft.lang.values.LongValue;
 import org.slf4j.Logger;
@@ -35,10 +36,10 @@ public class SharedHashMapTutorial {
     // *************************************************************************
 
     /**
-     * Shows Byteable usage in SharedHashMap
+     * Shows LongValue usage in SharedHashMap
      * @throws Exception
      */
-    public static void byteableDemo() throws Exception {
+    public static void longValueDemo() throws Exception {
         final int entries = 10;
 
         SharedHashMap<Integer, LongValue> map =
@@ -70,10 +71,32 @@ public class SharedHashMapTutorial {
             null // the value
         );
 
-        // v3 will be a brand and empty (key was not defined before) new on-heap
-        // object as the value parameter is null
-        LongValue v3 = map.acquireUsing(
-            2,   // the key
+        map.close();
+    }
+
+    /**
+     * Shows MyDataType usage in SharedHashMap
+     * @throws Exception
+     */
+    public static void cutomTypeDemo() throws Exception {
+        final int entries = 10;
+
+        SharedHashMap<Integer, MyDataType> map =
+            new SharedHashMapBuilder()
+                .entries(entries)
+                .segments(128)
+                .entrySize(24)
+                .generatedValueType(true)
+                .create(
+                    getPersistenceFile(),
+                    Integer.class,
+                    MyDataType.class);
+
+
+        // v1 will be a reference to the newly created heap object (MyDataType£heap)
+        //
+        MyDataType v1 = map.acquireUsing(
+            1,   // the key
             null // the value
         );
 
@@ -112,7 +135,8 @@ public class SharedHashMapTutorial {
 
     public static void main(String[] args) {
         try {
-            SharedHashMapTutorial.byteableDemo();
+            SharedHashMapTutorial.longValueDemo();
+            //SharedHashMapTutorial.cutomTypeDemo();
         } catch (Exception e) {
             LOGGER.warn("Exception",e);
         }
