@@ -19,6 +19,7 @@ import net.openhft.collections.SharedHashMap;
 import net.openhft.collections.SharedHashMapBuilder;
 import net.openhft.collections.tutorial.values.MyDataType;
 import net.openhft.collections.tutorial.values.NativeLongValue;
+import net.openhft.lang.model.DataValueClasses;
 import net.openhft.lang.values.LongValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,12 +79,10 @@ public class SharedHashMapTutorial {
      * Shows MyDataType usage in SharedHashMap
      * @throws Exception
      */
-    public static void cutomTypeDemo() throws Exception {
-        final int entries = 10;
-
-        SharedHashMap<Integer, MyDataType> map =
+    public static void customTypeDemo() throws Exception {
+        final SharedHashMap<Integer, MyDataType> map =
             new SharedHashMapBuilder()
-                .entries(entries)
+                .entries(10)
                 .segments(128)
                 .entrySize(24)
                 .generatedValueType(true)
@@ -93,12 +92,34 @@ public class SharedHashMapTutorial {
                     MyDataType.class);
 
 
-        // v1 will be a reference to the newly created heap object (MyDataType£heap)
-        //
-        MyDataType v1 = map.acquireUsing(
-            1,   // the key
-            null // the value
-        );
+        MyDataType mdt = DataValueClasses.newDirectReference(MyDataType.class);
+        map.acquireUsing(1,mdt);
+
+        try {
+            mdt.busyLockRecord();
+            new Thread() {
+                @Override
+                public void run() {
+                    MyDataType mdt1 = DataValueClasses.newDirectReference(MyDataType.class);
+                    map.getUsing(1, mdt1);
+
+                    try {
+                        mdt1.busyLockRecord();
+                        LOGGER.debug("Field1 = {} ",mdt1.getField1());
+                        LOGGER.debug("Field2 = {} ",mdt1.getField2());
+                    } catch (InterruptedException e) {
+                        LOGGER.warn("InterruptedException",e);
+                    } finally {
+                        mdt1.unlockRecord();
+                    }
+                }
+            }.start();
+
+            mdt.setField1(1l);
+            mdt.setField2(2f);
+        } finally {
+            mdt.unlockRecord();
+        }
 
         map.close();
     }
@@ -107,21 +128,8 @@ public class SharedHashMapTutorial {
     // Helpers
     // *************************************************************************
 
-    /**
-     * @param sb
-     * @param i
-     * @return
-     */
-    private static CharSequence getKeyCharSequence(StringBuilder sb, int i) {
-        sb.setLength(0);
-        sb.append("key:");
-        sb.append(i);
-
-        return sb;
-    }
-
     private static File getPersistenceFile() {
-        String TMP = System.getProperty("java.io.tmpdir");
+        String TMP = System.getProperty("java.io.tmpdir") + "\\hft";
         File file = new File(TMP,"hft-collections-shm-tutorial");
         file.delete();
         file.deleteOnExit();
@@ -135,8 +143,8 @@ public class SharedHashMapTutorial {
 
     public static void main(String[] args) {
         try {
-            SharedHashMapTutorial.longValueDemo();
-            //SharedHashMapTutorial.cutomTypeDemo();
+            //SharedHashMapTutorial.longValueDemo();
+            SharedHashMapTutorial.customTypeDemo();
         } catch (Exception e) {
             LOGGER.warn("Exception",e);
         }
