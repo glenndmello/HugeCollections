@@ -95,9 +95,11 @@ public class SharedHashMapTutorial {
         MyDataType mdt = DataValueClasses.newDirectReference(MyDataType.class);
         map.acquireUsing(1,mdt);
 
+        Thread t = null;
+
         try {
             mdt.busyLockRecord();
-            new Thread() {
+            t = new Thread(new Runnable() {
                 @Override
                 public void run() {
                     MyDataType mdt1 = DataValueClasses.newDirectReference(MyDataType.class);
@@ -105,20 +107,26 @@ public class SharedHashMapTutorial {
 
                     try {
                         mdt1.busyLockRecord();
-                        LOGGER.debug("Field1 = {} ",mdt1.getField1());
-                        LOGGER.debug("Field2 = {} ",mdt1.getField2());
+                        LOGGER.info("Field1 = {} ",mdt1.getField1());
+                        LOGGER.info("Field2 = {} ",mdt1.getField2());
                     } catch (InterruptedException e) {
                         LOGGER.warn("InterruptedException",e);
                     } finally {
                         mdt1.unlockRecord();
                     }
                 }
-            }.start();
+            },"CustomType-Thread");
+
+            t.start();
 
             mdt.setField1(1l);
             mdt.setField2(2f);
         } finally {
             mdt.unlockRecord();
+        }
+
+        if(t != null) {
+            t.join();
         }
 
         map.close();
@@ -129,7 +137,7 @@ public class SharedHashMapTutorial {
     // *************************************************************************
 
     private static File getPersistenceFile() {
-        String TMP = System.getProperty("java.io.tmpdir") + "\\hft";
+        String TMP = System.getProperty("java.io.tmpdir");
         File file = new File(TMP,"hft-collections-shm-tutorial");
         file.delete();
         file.deleteOnExit();
