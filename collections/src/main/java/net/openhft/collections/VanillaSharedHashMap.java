@@ -55,6 +55,9 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void close() {
         if (ms == null)
@@ -74,11 +77,17 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
         return bytes;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V put(K key, V value) {
         return put0(key, value, true);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V putIfAbsent(K key, V value) {
         return put0(key, value, false);
@@ -104,6 +113,9 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
         return bytes;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V get(Object key) {
         return lookupUsing(key, null, false);
@@ -129,19 +141,47 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
         return segments[segmentNum].acquire(bytes, value, hash2, create);
     }
 
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V remove(Object key) {
-        return removeUsing(key, null);
+        return removeWith(key, null);
     }
 
-    private V removeUsing(Object key, V value) {
+    /**
+     *
+     * @param key the key of the entry to remove
+     * @param expectedValue null if not required
+     * @return
+     */
+    private V removeWith(Object key, V expectedValue) {
         if (!kClass.isInstance(key)) return null;
         DirectBytes bytes = getKeyAsBytes((K) key);
         long hash = longHashCode(bytes);
         int segmentNum = (int) (hash & (builder.segments() - 1));
         int hash2 = (int) (hash / builder.segments());
+
+        return segments[segmentNum].remove(bytes, expectedValue, hash2);
+    }
+
+    /**
+     * replace the value in a map, only if the existing entry equals {@param existingValue}
+     *
+     * @param key           the key into the map
+     * @param existingValue the expected existing value in the map ( could be null when we don't wish to do this check )
+     * @param newValue      the new value you wish to store in the map
+     * @return the value that was replaced
+     */
+    private V replaceUsing(final Object key, final V existingValue, final V newValue) {
+        if (!kClass.isInstance(key)) return null;
+        final DirectBytes bytes = getKeyAsBytes((K) key);
+        final long hash = longHashCode(bytes);
+        final int segmentNum = (int) (hash & (builder.segments() - 1));
+        final int hash2 = (int) (hash / builder.segments());
 //        System.out.println("[" + key + "] s: " + segmentNum + " h2: " + hash2);
-        return segments[segmentNum].remove(bytes, value, hash2);
+        return segments[segmentNum].replace(bytes, existingValue, newValue, hash2);
     }
 
     private long longHashCode(DirectBytes bytes) {
@@ -166,41 +206,54 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
 
 
     /**
-     * Removes the entry for a key only if currently mapped to a given value.
-     * This is equivalent to
-     * <pre>
-     *   if (map.containsKey(key) &amp;&amp; map.get(key).equals(value)) {
-     *       map.remove(key);
-     *       return true;
-     *   } else return false;</pre>
-     * except that the action is performed atomically.
+     * {@inheritDoc}
      *
-     * @param key   key with which the specified value is associated
-     * @param value value expected to be associated with the specified key
-     * @return <tt>true</tt> if the value was removed
-     * @throws UnsupportedOperationException if the <tt>remove</tt> operation
-     *                                       is not supported by this map
-     * @throws ClassCastException            if the key or value is of an inappropriate
-     *                                       type for this map
-     *                                       (<a href="../Collection.html#optional-restrictions">optional</a>)
-     * @throws NullPointerException          if the specified key or value is null,
-     *                                       and this map does not permit null keys or values
-     *                                       (<a href="../Collection.html#optional-restrictions">optional</a>)
+     * @throws NullPointerException if the specified key is null
      */
     @Override
     public boolean remove(Object key, Object value) {
-        final V v = removeUsing(key, (V) value);
+        final V v = removeWith(key, (V) value);
         return v != null;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws NullPointerException if any of the arguments are null
+     */
     @Override
     public boolean replace(K key, V oldValue, V newValue) {
-        throw new UnsupportedOperationException();
+
+        if (key == null)
+            throw new NullPointerException("'key' can not be null");
+
+        if (oldValue == null)
+            throw new NullPointerException("'oldValue' can not be null");
+
+        if (newValue == null)
+            throw new NullPointerException("'newValue' can not be null");
+
+        return oldValue.equals(replaceUsing(key, oldValue, newValue));
     }
 
+
+    /**
+     * {@inheritDoc}
+     *
+     * @return the previous value associated with the specified key,
+     * or <tt>null</tt> if there was no mapping for the key
+     * @throws NullPointerException if the specified key or value is null
+     */
     @Override
     public V replace(K key, V value) {
-        throw new UnsupportedOperationException();
+
+        if (key == null)
+            throw new NullPointerException("'key' can not be null");
+
+        if (value == null)
+            throw new NullPointerException("'value' can not be null");
+
+        return replaceUsing(key, (V) null, value);
     }
 
     class Segment {
@@ -258,6 +311,16 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
             }
         }
 
+
+        /**
+         * used to acquire and object of type V from the map
+         *
+         * @param keyBytes
+         * @param value
+         * @param hash2    the hash code of the object to acquire
+         * @param create
+         * @return
+         */
         public V acquire(DirectBytes keyBytes, V value, int hash2, boolean create) {
             if (hash2 == hashLookup.unsetKey())
                 hash2 = ~hash2;
@@ -332,6 +395,13 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
             return ret;
         }
 
+        /**
+         * readObjectUsing - the "using" part means, reuse this object if possible.
+         *
+         * @param value  null - creates an object on demand.  It shouldn't be null in most examples, otherwise it will reuse this object
+         * @param offset
+         * @return
+         */
         @SuppressWarnings("unchecked")
         private V readObjectUsing(V value, long offset) {
             if (value instanceof Byteable) {
@@ -354,7 +424,13 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
                     && tmpBytes.startsWith(keyBytes);
         }
 
-        public V remove(DirectBytes keyBytes, V value, int hash2) {
+        /**
+         * @param keyBytes
+         * @param expectedValue if null no check if performed, otherwise, the remove will only occur if the value to be removed equals the expected value
+         * @param hash2
+         * @return
+         */
+        public V remove(DirectBytes keyBytes, V expectedValue, int hash2) {
             if (hash2 == hashLookup.unsetKey())
                 hash2 = ~hash2;
             lock();
@@ -370,20 +446,78 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
                         tmpBytes.storePositionAndSize(bytes, offset, builder.entrySize());
                         if (!keyEquals(keyBytes, tmpBytes))
                             continue;
-                        long keyLength = align(keyBytes.remaining());
-                        tmpBytes.skip(keyLength);
-                        V v = value == null && builder.removeReturnsNull() ? null : readObjectUsing(value, offset + keyLength);
+                        long keyLength = align(keyBytes.remaining() + tmpBytes.position()); // includes the stop bit length.
+                        tmpBytes.position(keyLength);
+                        V valueRemoved = expectedValue == null && builder.removeReturnsNull() ? null : readObjectUsing(null, offset + keyLength);
+
+                        if (expectedValue != null && !expectedValue.equals(valueRemoved))
+                            return null;
+
                         hashLookup.remove(hash2, pos);
                         freeList.clear(pos);
                         if (pos < nextSet)
                             nextSet = pos;
-                        return v;
+                        return valueRemoved;
                     }
                 }
             } finally {
                 unlock();
             }
         }
+
+
+        /**
+         * implementation for map.replace(Key,Value) and map.replace(Key,Old,New)
+         *
+         * @param keyBytes      the key of the entry to be replaced
+         * @param expectedValue the expected value to replaced
+         * @param newValue      the new value that will only be set if the existing value in the map equals the {@param expectedValue} or  {@param expectedValue} is null
+         * @param hash2         the hash code
+         * @return null if the value was not replaced, else the value that is replaced is returned
+         */
+        private V replace(DirectBytes keyBytes, V expectedValue, V newValue, int hash2) {
+            if (hash2 == hashLookup.unsetKey())
+                hash2 = ~hash2;
+            lock();
+            try {
+
+                hashLookup.startSearch(hash2);
+                while (true) {
+
+                    final int pos = hashLookup.nextInt();
+
+                    if (pos == hashLookup.unsetValue()) {
+                        return null;
+
+                    } else {
+
+                        final long offset = entriesOffset + pos * builder.entrySize();
+                        tmpBytes.storePositionAndSize(bytes, offset, builder.entrySize());
+
+                        if (!keyEquals(keyBytes, tmpBytes))
+                            continue;
+                        final long keyLength = keyBytes.remaining();
+                        tmpBytes.skip(keyLength);
+                        final long alignPosition = align(tmpBytes.position());
+                        tmpBytes.position(alignPosition);
+                        final V valueRead = readObjectUsing(null, offset + keyLength);
+
+                        if (valueRead == null)
+                            return null;
+
+                        if (expectedValue == null || expectedValue.equals(valueRead)) {
+                            tmpBytes.position(alignPosition);
+                            appendInstance(keyBytes, newValue);
+                        }
+
+                        return valueRead;
+                    }
+                }
+            } finally {
+                unlock();
+            }
+        }
+
 
         public V put(DirectBytes keyBytes, V value, int hash2, boolean replaceIfPresent) {
             if (hash2 == hashLookup.unsetKey())
@@ -392,26 +526,26 @@ public class VanillaSharedHashMap<K, V> extends AbstractMap<K, V> implements Sha
             try {
                 hashLookup.startSearch(hash2);
                 while (true) {
-                    int pos = hashLookup.nextInt();
+                    final int pos = hashLookup.nextInt();
                     if (pos == hashLookup.unsetValue()) {
                         putEntry(keyBytes, value, hash2);
                         return null;
 
                     } else {
-                        long offset = entriesOffset + pos * builder.entrySize();
+                        final long offset = entriesOffset + pos * builder.entrySize();
                         tmpBytes.storePositionAndSize(bytes, offset, builder.entrySize());
                         if (!keyEquals(keyBytes, tmpBytes))
                             continue;
-                        long keyLength = keyBytes.remaining();
+                        final long keyLength = keyBytes.remaining();
                         tmpBytes.skip(keyLength);
-                        long alignPosition = align(tmpBytes.position());
+                        final long alignPosition = align(tmpBytes.position());
                         tmpBytes.position(alignPosition);
                         if (replaceIfPresent) {
                             if (builder.putReturnsNull()) {
                                 appendInstance(keyBytes, value);
                                 return null;
                             }
-                            V v = readObjectUsing(null, offset + alignPosition);
+                            final V v = readObjectUsing(null, offset + alignPosition);
                             tmpBytes.position(alignPosition);
                             appendInstance(keyBytes, value);
                             return v;
