@@ -14,10 +14,8 @@ public interface MyDataType {
     // Field 1
     public void setField1(long value);
     public long getField1();
-    public long addAtomicField1(long toAdd);
 
     // Field 2
     public void setField2(double value);
     public double getField2();
-    public double addAtomicField2(double toAdd);
 }

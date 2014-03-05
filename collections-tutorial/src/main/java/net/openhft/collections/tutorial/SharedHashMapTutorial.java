@@ -46,7 +46,7 @@ public class SharedHashMapTutorial {
         SharedHashMap<Integer, LongValue> map =
             new SharedHashMapBuilder()
                 .entries(entries)
-                .segments(128)
+                .minSegments(128)
                 .entrySize(24)
                 .generatedValueType(true)
                 .create(
@@ -83,7 +83,7 @@ public class SharedHashMapTutorial {
         final SharedHashMap<Integer, MyDataType> map =
             new SharedHashMapBuilder()
                 .entries(10)
-                .segments(128)
+                .minSegments(128)
                 .entrySize(24)
                 .generatedValueType(true)
                 .create(
