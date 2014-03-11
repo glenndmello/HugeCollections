@@ -17,7 +17,7 @@
 package net.openhft.collections;
 
 /**
- * This is only used to store keys and positions, but it could store int/int key/values for another purpose.
+ * This is only used to store keys and positions, but it could store int/int key/statemachine for another purpose.
  */
 interface IntIntMultiMap {
     /**

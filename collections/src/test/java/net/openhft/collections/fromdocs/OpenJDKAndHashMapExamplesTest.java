@@ -107,7 +107,7 @@ public class OpenJDKAndHashMapExamplesTest {
             }
         }
 
-        // bondZC will be full of default values and zero length string the first time.
+        // bondZC will be full of default statemachine and zero length string the first time.
 
         // from this point, all operations are completely record/entry local,
         // no other resource is involved.

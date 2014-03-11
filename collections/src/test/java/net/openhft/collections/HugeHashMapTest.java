@@ -100,7 +100,7 @@ public class HugeHashMapTest {
         int count = 4000000;
         HugeConfig config = HugeConfig.DEFAULT.clone()
                 .setSegments(256)
-                .setSmallEntrySize(72) // TODO 64 corrupts the values !!
+                .setSmallEntrySize(72) // TODO 64 corrupts the statemachine !!
                 .setCapacity(count);
 
         final HugeHashMap<CharSequence, SampleValues> map =

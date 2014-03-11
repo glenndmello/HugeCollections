@@ -31,10 +31,10 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
     private static final int UNSET_VALUE = Integer.MIN_VALUE;
     /**
      * hash is in 32 higher order bits, because in Intel's little-endian
-     * they are written first in memory, and in memory we have keys and values
+     * they are written first in memory, and in memory we have keys and statemachine
      * in natural order: 4 bytes of k1, 4 bytes of v1, 4 bytes of k2, ...
      * and this is somehow compatible with previous version of this class,
-     * where keys were written before values explicitly.
+     * where keys were written before statemachine explicitly.
      * <p/>
      * However, this layout increases latency of map operations
      * by 1 clock cycle :), because we always need to perform shift to obtain
@@ -128,7 +128,7 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
 //            int hash2 = bytes.readInt(pos + KEY);
             int hash2 = (int) (entry >> 32);
             if (hash2 == key) {
-                // swap values and zeroOut
+                // swap statemachine and zeroOut
                 if (pos != pos0) {
                     long entry2 = bytes.readLong(pos);
                     bytes.writeLong(pos0, entry2);
@@ -138,7 +138,7 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
             }
         }
         pos = (pos + ENTRY_SIZE) & capacityMask2;
-        // re-inset any values in between pos and pos2.
+        // re-inset any statemachine in between pos and pos2.
         while (pos < pos2) {
             long entry2 = bytes.readLong(pos);
             int hash2 = (int) (entry2 >> 32);
