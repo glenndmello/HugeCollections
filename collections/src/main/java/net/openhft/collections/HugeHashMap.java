@@ -24,21 +24,24 @@ import net.openhft.lang.io.MultiStoreBytes;
 import net.openhft.lang.io.NativeBytes;
 import net.openhft.lang.io.serialization.BytesMarshallable;
 import net.openhft.lang.io.serialization.impl.VanillaBytesMarshallerFactory;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
 /**
  * User: plawrey Date: 07/12/13 Time: 10:38
  */
+@SuppressWarnings("ALL")
 public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V> {
     private final Segment<K, V>[] segments;
-    private final int segmentMask;
-    private final int segmentShift;
-    private final boolean csKey;
-    private final boolean longHashable;
-    private final boolean bytesMarshallable;
-//    private final Class<K> kClass;
+    private final Hasher hasher;
+    //    private final Class<K> kClass;
 //    private final Class<V> vClass;
+
+    transient Set<Map.Entry<K, V>> entrySet;
+    transient Set<K> keySet;
+    transient Collection<V> values;
+
 
 
     public HugeHashMap() {
@@ -49,38 +52,20 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
 //        this.kClass = kClass;
 //        this.vClass = vClass;
         final int segmentCount = config.getSegments();
-        segmentMask = segmentCount - 1;
-        segmentShift = Maths.intLog2(segmentCount);
-        csKey = CharSequence.class.isAssignableFrom(kClass);
-        longHashable = LongHashable.class.isAssignableFrom(kClass);
-        bytesMarshallable = BytesMarshallable.class.isAssignableFrom(vClass);
+        hasher = new Hasher(kClass, segmentCount);
+        boolean bytesMarshallable = BytesMarshallable.class.isAssignableFrom(vClass);
         //noinspection unchecked
         segments = (Segment<K, V>[]) new Segment[segmentCount];
         for (int i = 0; i < segmentCount; i++)
-            segments[i] = new Segment<K, V>(config, csKey, bytesMarshallable, vClass);
-    }
-
-    protected long hash(K key) {
-        long h;
-        if (csKey) {
-            h = Maths.hash((CharSequence) key);
-        } else if (longHashable) {
-            h = ((LongHashable) key).longHashCode();
-        } else {
-            h = (long) key.hashCode() << 31;
-        }
-        h += (h >>> 42) - (h >>> 21);
-        h += (h >>> 14) - (h >>> 7);
-        return h;
+            segments[i] = new Segment<K, V>(config, hasher, CharSequence.class.isAssignableFrom(kClass), bytesMarshallable, vClass);
     }
 
     @Override
     public V put(K key, V value) {
-        long h = hash(key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
-        segments[segment].put(h, key, value, true, true);
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
+        segments[segment].put(segmentHash, key, value, true, true);
         return null;
     }
 
@@ -91,58 +76,67 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
 
     @Override
     public V get(K key, V value) {
-        long h = hash(key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
-        return segments[segment].get(h, key, value);
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
+        return segments[segment].get(segmentHash, key, value);
     }
 
     @Override
     public V remove(Object key) {
-        long h = hash((K) key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
-        segments[segment].remove(h, (K) key);
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
+        segments[segment].remove(segmentHash, (K) key);
         return null;
     }
 
     @Override
     public boolean containsKey(Object key) {
-        long h = hash((K) key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
-        return segments[segment].containsKey(h, (K) key);
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
+        return segments[segment].containsKey(segmentHash, (K) key);
     }
 
+    @NotNull
     @Override
     public Set<Entry<K, V>> entrySet() {
-        throw new UnsupportedOperationException();
+        return (entrySet != null) ? entrySet : (entrySet = new EntrySet());
+    }
+
+    @NotNull
+    @Override
+    public Set<K> keySet() {
+        return (keySet != null) ? keySet : (keySet = new KeySet());
+    }
+
+    @NotNull
+    @Override
+    public Collection<V> values() {
+        return (values != null) ? values : (values = new Values());
     }
 
     @Override
-    public V putIfAbsent(K key, V value) {
-        long h = hash(key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
-        segments[segment].put(h, key, value, false, true);
+    public V putIfAbsent(@NotNull K key, V value) {
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
+        segments[segment].put(segmentHash, key, value, false, true);
         return null;
     }
 
     @Override
-    public boolean remove(Object key, Object value) {
-        long h = hash((K) key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
+    public boolean remove(@NotNull Object key, Object value) {
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
         Segment<K, V> segment2 = segments[segment];
+        //noinspection SynchronizationOnLocalVariableOrMethodParameter
         synchronized (segment2) {
             V value2 = get(key);
             if (value2 != null && value.equals(value2)) {
-                segment2.remove(h, (K) key);
+                segment2.remove(segmentHash, (K) key);
                 return true;
             }
             return false;
@@ -150,16 +144,16 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
     }
 
     @Override
-    public boolean replace(K key, V oldValue, V newValue) {
-        long h = hash(key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
+    public boolean replace(@NotNull K key, @NotNull V oldValue, @NotNull V newValue) {
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
         Segment<K, V> segment2 = segments[segment];
+        //noinspection SynchronizationOnLocalVariableOrMethodParameter
         synchronized (segment2) {
             V value2 = get(key);
             if (value2 != null && oldValue.equals(value2)) {
-                segment2.put(h, key, newValue, true, true);
+                segment2.put(segmentHash, key, newValue, true, true);
                 return true;
             }
             return false;
@@ -167,12 +161,11 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
     }
 
     @Override
-    public V replace(K key, V value) {
-        long h = hash(key);
-        int segment = (int) (h & segmentMask);
-        // leave the remaining hashCode
-        h >>>= segmentShift;
-        segments[segment].put(h, key, value, true, false);
+    public V replace(@NotNull K key, @NotNull V value) {
+        long hash = hasher.hash(key);
+        int segment = hasher.getSegment(hash);
+        int segmentHash = hasher.segmentHash(hash);
+        segments[segment].put(segmentHash, key, value, true, false);
         return null;
     }
 
@@ -210,9 +203,47 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
         }
     }
 
+    static final class Hasher<K> {
+
+        private final boolean isCharSequence;
+
+        private final boolean isLongHashable;
+
+        private final int segmentMask, segmentShift;
+
+        Hasher(Class keyClass, int segmentCount) {
+            this.isCharSequence = CharSequence.class.isAssignableFrom(keyClass);
+            this.isLongHashable = LongHashable.class.isAssignableFrom(keyClass);
+            this.segmentMask = segmentCount - 1;
+            this.segmentShift = Maths.intLog2(segmentCount);
+        }
+
+        final long hash(K key) {
+            long hash;
+            if (isCharSequence) {
+                hash = Maths.hash((CharSequence) key);
+            } else if (isLongHashable) {
+                hash = ((LongHashable) key).longHashCode();
+            } else {
+                hash = (long) key.hashCode() << 31;
+            }
+            hash += (hash >>> 42) - (hash >>> 21);
+            hash += (hash >>> 14) - (hash >>> 7);
+            return hash;
+        }
+
+        final int segmentHash(long hash) {
+            return (int) (hash >>> segmentShift);
+        }
+
+        public final int getSegment(long hash) {
+            return (int) (hash & segmentMask);
+        }
+    }
+
     static class Segment<K, V> {
         final VanillaBytesMarshallerFactory bmf = new VanillaBytesMarshallerFactory();
-        final HashPosMultiMap smallMap;
+        final IntIntMultiMap smallMap;
         final Map<K, DirectStore> map = new HashMap<K, DirectStore>();
         final DirectBytes tmpBytes;
         final MultiStoreBytes bytes = new MultiStoreBytes();
@@ -221,34 +252,36 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
         final int smallEntrySize;
         final int entriesPerSegment;
         final boolean csKey;
+        final Hasher hasher;
         final StringBuilder sbKey;
         final boolean bytesMarshallable;
         final Class<V> vClass;
         long offHeapUsed = 0;
         long size = 0;
 
-        Segment(HugeConfig config, boolean csKey, boolean bytesMarshallable, Class<V> vClass) {
+        Segment(HugeConfig config, Hasher hasher, boolean csKey, boolean bytesMarshallable, Class<V> vClass) {
             this.csKey = csKey;
+            this.hasher = hasher;
             this.bytesMarshallable = bytesMarshallable;
             this.vClass = vClass;
             smallEntrySize = (config.getSmallEntrySize() + 7) & ~7; // round to next multiple of 8.
             entriesPerSegment = config.getEntriesPerSegment();
             store = new DirectStore(bmf, smallEntrySize * entriesPerSegment, false);
             usedSet = new BitSet(config.getEntriesPerSegment());
-            smallMap = new IntIntMultiMap(entriesPerSegment * 2);
+            smallMap = new VanillaIntIntMultiMap(entriesPerSegment * 2);
             tmpBytes = new DirectStore(bmf, 64 * smallEntrySize, false).createSlice();
             offHeapUsed = tmpBytes.capacity() + store.size();
             sbKey = csKey ? new StringBuilder() : null;
         }
 
-        public synchronized void put(long hash, K key, V value, boolean ifPresent, boolean ifAbsent) {
+        synchronized void put(int hash, K key, V value, boolean ifPresent, boolean ifAbsent) {
             // search for the previous entry
             int h = smallMap.startSearch(hash);
             boolean foundSmall = false, foundLarge = false;
             while (true) {
                 int pos = smallMap.nextPos();
                 if (pos < 0) {
-                    Object key2 = key instanceof CharSequence ? key.toString() : key;
+                    K key2 = key instanceof CharSequence ? (K) key.toString() : key;
                     final DirectStore store = map.get(key2);
                     if (store == null) {
                         if (ifPresent && !ifAbsent)
@@ -274,6 +307,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
 
             tmpBytes.clear();
             if (csKey)
+                //noinspection ConstantConditions
                 tmpBytes.writeUTFΔ((CharSequence) key);
             else
                 tmpBytes.writeObject(key);
@@ -292,7 +326,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
                     remove(hash, key);
                 }
                 // look for a free spot.
-                int position = (int) (h & (entriesPerSegment - 1));
+                int position = h & (entriesPerSegment - 1);
                 int free = usedSet.nextClearBit(position);
                 if (free >= entriesPerSegment)
                     free = usedSet.nextClearBit(0);
@@ -325,12 +359,12 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             this.size++;
         }
 
-        public synchronized V get(long hash, K key, V value) {
+        synchronized V get(int hash, K key, V value) {
             smallMap.startSearch(hash);
             while (true) {
                 int pos = smallMap.nextPos();
                 if (pos < 0) {
-                    Object key2 = key instanceof CharSequence ? key.toString() : key;
+                    K key2 = key instanceof CharSequence ? (K) key.toString() : key;
                     final DirectStore store = map.get(key2);
                     if (store == null)
                         return null;
@@ -355,11 +389,66 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             return (V) bytes.readObject();
         }
 
-        private boolean equals(K key, K key2) {
+        synchronized K getNextKey(K prevKey) {
+            int pos;
+            if (prevKey == null) {
+                pos = smallMap.firstPos();
+            } else {
+                int hash = hasher.segmentHash(hasher.hash(prevKey));
+                pos = smallMap.nextKeyAfter(hash);
+            }
+            while (true) {
+                if (pos < 0) {
+                    return null;
+                } else {
+                    bytes.storePositionAndSize(store, pos * smallEntrySize, smallEntrySize);
+                    K key = getKey();
+                    if (prevKey == null || !equals(key, prevKey)) {
+                        return key;
+                    }
+                }
+                pos = smallMap.nextPos();
+            }
+        }
+
+        synchronized Entry<K, V> getNextEntry(K prevKey) {
+            try {
+                int pos;
+                if (prevKey == null) {
+                    pos = smallMap.firstPos();
+                } else {
+                    int hash = hasher.segmentHash(hasher.hash(prevKey));
+                    pos = smallMap.nextKeyAfter(hash);
+                }
+                while (true) {
+                    if (pos < 0) {
+                        return null;
+                    } else {
+                        bytes.storePositionAndSize(store, pos * smallEntrySize, smallEntrySize);
+                        K key = getKey();
+                        if (prevKey == null || !equals(key, prevKey)) {
+                            if (bytesMarshallable) {
+                                V value = (V) NativeBytes.UNSAFE.allocateInstance(vClass);
+                                ((BytesMarshallable) value).readMarshallable(bytes);
+                                return new SimpleEntry<K, V>(key, value);
+                            } else {
+                                V value = (V) bytes.readObject();
+                                return new SimpleEntry<K, V>(key, value);
+                            }
+                        }
+                    }
+                    pos = smallMap.nextPos();
+                }
+            } catch (InstantiationException e) {
+                throw new AssertionError(e);
+            }
+        }
+
+        boolean equals(K key, K key2) {
             return csKey ? equalsCS((CharSequence) key, (CharSequence) key2) : key.equals(key2);
         }
 
-        private static boolean equalsCS(CharSequence key, CharSequence key2) {
+        static boolean equalsCS(CharSequence key, CharSequence key2) {
             if (key.length() != key2.length())
                 return false;
             for (int i = 0; i < key.length(); i++)
@@ -368,7 +457,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             return true;
         }
 
-        private K getKey() {
+        K getKey() {
             if (csKey) {
                 sbKey.setLength(0);
                 bytes.readUTFΔ(sbKey);
@@ -377,12 +466,12 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             return (K) bytes.readObject();
         }
 
-        public synchronized boolean containsKey(long hash, K key) {
+        synchronized boolean containsKey(int hash, K key) {
             smallMap.startSearch(hash);
             while (true) {
                 int pos = smallMap.nextPos();
                 if (pos < 0) {
-                    Object key2 = key instanceof CharSequence ? key.toString() : key;
+                    K key2 = key instanceof CharSequence ? (K) key.toString() : key;
                     return map.containsKey(key2);
                 }
                 bytes.storePositionAndSize(store, pos * smallEntrySize, smallEntrySize);
@@ -393,7 +482,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             }
         }
 
-        public synchronized boolean remove(long hash, K key) {
+        synchronized boolean remove(int hash, K key) {
             int h = smallMap.startSearch(hash);
             boolean found = false;
             while (true) {
@@ -411,7 +500,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
                     break;
                 }
             }
-            Object key2 = key instanceof CharSequence ? key.toString() : key;
+            K key2 = key instanceof CharSequence ? (K) key.toString() : key;
             DirectStore remove = map.remove(key2);
             if (remove == null)
                 return found;
@@ -421,21 +510,241 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             return true;
         }
 
-        public synchronized long offHeapUsed() {
+        synchronized long offHeapUsed() {
             return offHeapUsed;
         }
 
-        public synchronized long size() {
+        synchronized long size() {
             return this.size;
         }
 
-        public void clear() {
+        synchronized void clear() {
             usedSet.clear();
             smallMap.clear();
             for (DirectStore directStore : map.values()) {
                 directStore.free();
             }
             map.clear();
+            size = 0;
+        }
+    }
+
+    final class KeyIterator implements Iterator<K> {
+
+        int segmentIndex = segments.length - 1;
+
+        K nextKey, lastReturned;
+
+        K lastSegmentKey;
+
+        KeyIterator() {
+            nextKey = nextSegmentKey();
+        }
+
+        public K next() {
+            K e = nextKey;
+            if (e == null)
+                throw new NoSuchElementException();
+            lastReturned = e; // cannot assign until after null check
+            nextKey = nextSegmentKey();
+            return e;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return nextKey != null;
+        }
+
+        @Override
+        public void remove() {
+            if (lastReturned == null) throw new IllegalStateException();
+            HugeHashMap.this.remove(lastReturned);
+            lastReturned = null;
+        }
+
+        private K nextSegmentKey() {
+            while (segmentIndex >= 0) {
+                Segment<K, V> segment = segments[segmentIndex];
+                K key = segment.getNextKey(lastSegmentKey);
+                if (key == null) {
+                    segmentIndex--;
+                    lastSegmentKey = null;
+                } else {
+                    lastSegmentKey = key;
+                    return key;
+                }
+            }
+            return null;
+        }
+    }
+
+    final class ValueIterator implements Iterator<V> {
+
+        int segmentIndex = segments.length - 1;
+
+        Map.Entry<K, V> nextEntry, lastReturned;
+
+        K lastSegmentKey;
+
+        ValueIterator() {
+            nextEntry = nextSegmentEntry();
+        }
+
+        public V next() {
+            Entry<K, V> e = nextEntry;
+            if (e == null)
+                throw new NoSuchElementException();
+            lastReturned = e; // cannot assign until after null check
+            nextEntry = nextSegmentEntry();
+            return e.getValue();
+        }
+
+        @Override
+        public boolean hasNext() {
+            return nextEntry != null;
+        }
+
+        @Override
+        public void remove() {
+            if (lastReturned == null) throw new IllegalStateException();
+            HugeHashMap.this.remove(lastReturned.getKey(), lastReturned.getValue());
+            lastReturned = null;
+        }
+
+        private Entry<K, V> nextSegmentEntry() {
+            while (segmentIndex >= 0) {
+                Segment<K, V> segment = segments[segmentIndex];
+                Entry<K, V> entry = segment.getNextEntry(lastSegmentKey);
+                if (entry == null) {
+                    segmentIndex--;
+                    lastSegmentKey = null;
+                } else {
+                    lastSegmentKey = entry.getKey();
+                    return entry;
+                }
+            }
+            return null;
+        }
+    }
+
+    final class EntryIterator implements Iterator<Entry<K, V>> {
+
+        int segmentIndex = segments.length - 1;
+
+        Entry<K, V> nextEntry, lastReturned;
+
+        K lastSegmentKey;
+
+        EntryIterator() {
+            nextEntry = nextSegmentEntry();
+        }
+
+        public Map.Entry<K, V> next() {
+            Entry<K, V> e = nextEntry;
+            if (e == null)
+                throw new NoSuchElementException();
+            lastReturned = e; // cannot assign until after null check
+            nextEntry = nextSegmentEntry();
+            return e;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return nextEntry != null;
+        }
+
+        @Override
+        public void remove() {
+            if (lastReturned == null) throw new IllegalStateException();
+            HugeHashMap.this.remove(lastReturned.getKey());
+            lastReturned = null;
+        }
+
+        private Entry<K, V> nextSegmentEntry() {
+            while (segmentIndex >= 0) {
+                Segment<K, V> segment = segments[segmentIndex];
+                Entry<K, V> entry = segment.getNextEntry(lastSegmentKey);
+                if (entry == null) {
+                    segmentIndex--;
+                    lastSegmentKey = null;
+                } else {
+                    lastSegmentKey = entry.getKey();
+                    return entry;
+                }
+            }
+            return null;
+        }
+    }
+
+    final class KeySet extends AbstractSet<K> {
+        public Iterator<K> iterator() {
+            return new KeyIterator();
+        }
+        public int size() {
+            return HugeHashMap.this.size();
+        }
+        public boolean isEmpty() {
+            return HugeHashMap.this.isEmpty();
+        }
+        public boolean contains(Object o) {
+            return HugeHashMap.this.containsKey(o);
+        }
+        public boolean remove(Object o) {
+            return HugeHashMap.this.remove(o) != null;
+        }
+        public void clear() {
+            HugeHashMap.this.clear();
+        }
+    }
+
+    final class Values extends AbstractCollection<V> {
+        public Iterator<V> iterator() {
+            return new ValueIterator();
+        }
+        public int size() {
+            return HugeHashMap.this.size();
+        }
+        public boolean isEmpty() {
+            return HugeHashMap.this.isEmpty();
+        }
+        public boolean contains(Object o) {
+            return HugeHashMap.this.containsValue(o);
+        }
+        public void clear() {
+            HugeHashMap.this.clear();
+        }
+    }
+
+    final class EntrySet extends AbstractSet<Map.Entry<K, V>> {
+        public Iterator<Map.Entry<K, V>> iterator() {
+            return new EntryIterator();
+        }
+
+        public boolean contains(Object o) {
+            if (!(o instanceof Map.Entry))
+                return false;
+            Map.Entry<?, ?> e = (Map.Entry<?, ?>) o;
+            V v = HugeHashMap.this.get(e.getKey());
+            return v != null && v.equals(e.getValue());
+        }
+
+        public boolean remove(Object o) {
+            if (!(o instanceof Map.Entry))
+                return false;
+            Map.Entry<?, ?> e = (Map.Entry<?, ?>) o;
+            return HugeHashMap.this.remove(e.getKey(), e.getValue());
+        }
+
+        public int size() {
+            return HugeHashMap.this.size();
+        }
+
+        public boolean isEmpty() {
+            return HugeHashMap.this.isEmpty();
+        }
+
+        public void clear() {
+            HugeHashMap.this.clear();
         }
     }
 }

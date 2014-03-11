@@ -16,8 +16,10 @@
 
 package net.openhft.collections;
 
-public interface SharedMapErrorListener {
-    void onLockTimeout(long threadId) throws IllegalStateException;
+import net.openhft.lang.io.Bytes;
 
-    void errorOnUnlock(IllegalMonitorStateException e);
+public interface DirectMap {
+    void put(Bytes key, Bytes value);
+
+    void remove(Bytes key);
 }

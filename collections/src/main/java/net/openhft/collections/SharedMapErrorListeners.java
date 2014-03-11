@@ -22,8 +22,12 @@ import java.util.logging.Logger;
 public enum SharedMapErrorListeners implements SharedMapErrorListener {
     LOGGING {
         @Override
-        public void onLockTimeout(int threadId) throws IllegalStateException {
-            Logger.getLogger(getClass().getName()).severe("Grabbing lock held by threadId: " + threadId);
+        public void onLockTimeout(long threadId) throws IllegalStateException {
+            Logger logger = Logger.getLogger(getClass().getName());
+            if (threadId > 1L << 32)
+                logger.severe("Grabbing lock held by processId: " + (threadId >>> 33) + ", threadId: " + (threadId & 0xFFFFFFFFL));
+            else
+                logger.severe("Grabbing lock held by threadId: " + threadId);
         }
 
         @Override
@@ -32,7 +36,7 @@ public enum SharedMapErrorListeners implements SharedMapErrorListener {
         }
     }, ERROR {
         @Override
-        public void onLockTimeout(int threadId) throws IllegalStateException {
+        public void onLockTimeout(long threadId) throws IllegalStateException {
             throw new IllegalStateException("Unable to acquire lock held by threadId: " + threadId);
         }
 

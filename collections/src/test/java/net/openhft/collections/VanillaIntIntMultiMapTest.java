@@ -25,10 +25,10 @@ import static org.junit.Assert.*;
  * User: peter
  * Date: 09/12/13
  */
-public class IntIntMultiMapTest {
+public class VanillaIntIntMultiMapTest {
     @Test
     public void testPutRemoveSearch() {
-        HashPosMultiMap map = new IntIntMultiMap(16);
+        IntIntMultiMap map = new VanillaIntIntMultiMap(16);
         assertEquals("{ }", map.toString());
         map.put(1, 11);
         map.startSearch(1);
@@ -77,10 +77,36 @@ public class IntIntMultiMapTest {
     }
 
     @Test
+    public void testPutLimited() {
+        IntIntMultiMap map = new VanillaIntIntMultiMap(16);
+        assertTrue(map.putLimited(1, 11, 2));
+        assertTrue(map.putLimited(1, 12, 2));
+        assertFalse(map.putLimited(1, 13, 2));
+        assertTrue(map.putLimited(3, 31, 2));
+        assertTrue(map.putLimited(3, 32, 2));
+        assertFalse(map.putLimited(3, 33, 2));
+        // not enough space
+        assertFalse(map.putLimited(2, 22, 2));
+        assertTrue(map.putLimited(2, 22, 4));
+    }
+
+    @Test
+    public void firstAndNextNonEmptyPos() {
+        IntIntMultiMap map = new VanillaIntIntMultiMap(16);
+        map.put(1, 11);
+        map.put(2, 22);
+        map.put(3, 33);
+        assertEquals(11, map.firstPos());
+        assertEquals(22, map.nextKeyAfter(1));
+        assertEquals(33, map.nextKeyAfter(2));
+        assertEquals(-1, map.nextKeyAfter(3));
+    }
+
+    @Test
     public void testRemoveSpecific() {
         // Testing a specific case when the remove method on the map does (did) not work as expected. The size goes correctly to
         // 0 but the value is still present in the map.
-        HashPosMultiMap map = new IntIntMultiMap(10);
+        IntIntMultiMap map = new VanillaIntIntMultiMap(10);
 
         map.put(15, 1);
         map.remove(15, 1);

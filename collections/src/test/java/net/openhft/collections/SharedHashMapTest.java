@@ -42,32 +42,135 @@ public class SharedHashMapTest {
                 .minSegments(2)
                 .create(getPersistenceFile(), CharSequence.class, CharSequence.class);
 
-
+        assertFalse(map.containsKey("key3"));
         map.put("key1", "one");
         map.put("key2", "two");
+        assertEquals(2, map.size());
+
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+        assertFalse(map.containsKey("key3"));
 
         assertEquals("one", map.get("key1"));
         assertEquals("two", map.get("key2"));
 
         final CharSequence result = map.remove("key1");
 
+        assertEquals(1, map.size());
+
         assertEquals("one", result);
-
-
-        //  assertFalse(map.containsKey("key1"));
+        assertFalse(map.containsKey("key1"));
 
         assertEquals(null, map.get("key1"));
         assertEquals("two", map.get("key2"));
+        assertFalse(map.containsKey("key3"));
 
-
-        // let and one more item for luck !
+        // lets add one more item for luck !
         map.put("key3", "three");
         assertEquals("three", map.get("key3"));
-
+        assertTrue(map.containsKey("key3"));
+        assertEquals(2, map.size());
 
         // and just for kicks we'll overwrite what we have
         map.put("key3", "overwritten");
         assertEquals("overwritten", map.get("key3"));
+        assertTrue(map.containsKey("key3"));
+        assertEquals(2, map.size());
+
+        map.close();
+    }
+
+
+    @Test
+    public void testSize() throws Exception {
+
+        final SharedHashMap<CharSequence, CharSequence> map = new SharedHashMapBuilder()
+                .minSegments(1024)
+                .removeReturnsNull(true)
+                .create(getPersistenceFile(), CharSequence.class, CharSequence.class);
+
+
+        for (int i = 1; i < 1024; i++) {
+            map.put("key" + i, "value");
+            assertEquals(i, map.size());
+        }
+
+        for (int i = 1023; i >= 1; ) {
+            map.remove("key" + i);
+            i--;
+            assertEquals(i, map.size());
+        }
+        map.close();
+    }
+
+    @Test
+    public void testRemoveInteger() throws IOException {
+
+        final SharedHashMap<Object, Object> map = new SharedHashMapBuilder()
+                .create(getPersistenceFile(), Object.class, Object.class);
+
+
+        int count = 2345;
+        for (int i = 1; i < count; i++) {
+            map.put(i, i);
+            assertEquals(i, map.size());
+        }
+
+        for (int i = count - 1; i >= 1; ) {
+            Integer j = (Integer) map.put(i, i);
+            assertEquals(i, j.intValue());
+            Integer j2 = (Integer) map.remove(i);
+            assertEquals(i, j2.intValue());
+            i--;
+            assertEquals(i, map.size());
+        }
+        map.close();
+    }
+
+    @Test
+    public void testRemoveWithKeyAndRemoveReturnsNull() throws Exception {
+
+        final SharedHashMap<CharSequence, CharSequence> map = new SharedHashMapBuilder()
+                .minSegments(2)
+                .removeReturnsNull(true)
+                .create(getPersistenceFile(), CharSequence.class, CharSequence.class);
+
+        assertFalse(map.containsKey("key3"));
+        map.put("key1", "one");
+        map.put("key2", "two");
+        assertEquals(2, map.size());
+
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+        assertFalse(map.containsKey("key3"));
+
+        assertEquals("one", map.get("key1"));
+        assertEquals("two", map.get("key2"));
+
+        final CharSequence result = map.remove("key1");
+        assertEquals(null, result);
+
+        assertEquals(1, map.size());
+
+        assertFalse(map.containsKey("key1"));
+
+        assertEquals(null, map.get("key1"));
+        assertEquals("two", map.get("key2"));
+        assertFalse(map.containsKey("key3"));
+
+        // lets add one more item for luck !
+        map.put("key3", "three");
+        assertEquals("three", map.get("key3"));
+        assertTrue(map.containsKey("key3"));
+        assertEquals(2, map.size());
+
+        // and just for kicks we'll overwrite what we have
+        map.put("key3", "overwritten");
+        assertEquals("overwritten", map.get("key3"));
+        assertTrue(map.containsKey("key3"));
+        assertEquals(2, map.size());
+
+        map.close();
     }
 
 
@@ -81,34 +184,59 @@ public class SharedHashMapTest {
 
         map.put("key1", "one");
         map.put("key2", "two");
+        assertEquals(2, map.size());
 
         assertEquals("one", map.get("key1"));
         assertEquals("two", map.get("key2"));
 
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+
         final CharSequence result = map.replace("key1", "newValue");
 
         assertEquals("one", result);
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+        assertEquals(2, map.size());
 
         assertEquals("newValue", map.get("key1"));
         assertEquals("two", map.get("key2"));
 
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+        assertFalse(map.containsKey("key3"));
+
+        assertEquals(2, map.size());
 
         // let and one more item for luck !
         map.put("key3", "three");
-        assertEquals("three", map.get("key3"));
+        assertEquals(3, map.size());
 
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+        assertTrue(map.containsKey("key3"));
+        assertEquals("three", map.get("key3"));
 
         // and just for kicks we'll overwrite what we have
         map.put("key3", "overwritten");
         assertEquals("overwritten", map.get("key3"));
+
+        assertTrue(map.containsKey("key1"));
+        assertTrue(map.containsKey("key2"));
+        assertTrue(map.containsKey("key3"));
 
         final CharSequence result2 = map.replace("key2", "newValue");
 
         assertEquals("two", result2);
         assertEquals("newValue", map.get("key2"));
 
-        final CharSequence result3 = map.replace("rublish", "newValue");
+        final CharSequence result3 = map.replace("rubbish", "newValue");
         assertEquals(null, result3);
+
+        assertFalse(map.containsKey("rubbish"));
+        assertEquals(3, map.size());
+
+        map.close();
     }
 
 
@@ -136,7 +264,6 @@ public class SharedHashMapTest {
         map.put("key3", "three");
         assertEquals("three", map.get("key3"));
 
-
         // and just for kicks we'll overwrite what we have
         map.put("key3", "overwritten");
         assertEquals("overwritten", map.get("key3"));
@@ -152,6 +279,7 @@ public class SharedHashMapTest {
         final boolean result4 = map.replace("key2", "newValue2", "newValue2");
         assertEquals(true, result4);
 
+        map.close();
     }
 
     @Test
@@ -184,51 +312,58 @@ public class SharedHashMapTest {
         final boolean wasRemoved2 = map.remove("key1", "three");
         assertFalse(wasRemoved2);
 
-        System.out.println("key1={}" + map.get("key1"));
-        System.out.println("key1={}" + map.get("key2"));
-
-        // let and one more item for luck !
+        // lets add one more item for luck !
         map.put("key3", "three");
         assertEquals("three", map.get("key3"));
-
 
         // and just for kicks we'll overwrite what we have
         map.put("key3", "overwritten");
         assertEquals("overwritten", map.get("key3"));
 
+        map.close();
     }
 
 
     @Test
     public void testAcquireWithNullKey() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(1000 * 1000, 128, 24);
+        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
         assertNull(map.acquireUsing(null, new LongValueNative()));
+
+        map.close();
     }
 
     @Test
     public void testGetWithNullKey() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(1000 * 1000, 128, 24);
+        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
         assertNull(map.getUsing(null, new LongValueNative()));
+
+        map.close();
     }
 
     @Test
     public void testAcquireWithNullContainer() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(1000 * 1000, 128, 24);
+        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
         map.acquireUsing("key", new LongValueNative());
         assertEquals(0, map.acquireUsing("key", null).getValue());
+
+        map.close();
     }
 
     @Test
     public void testGetWithNullContainer() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(1000 * 1000, 128, 24);
+        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
         map.acquireUsing("key", new LongValueNative());
         assertEquals(0, map.getUsing("key", null).getValue());
+
+        map.close();
     }
 
     @Test
     public void testGetWithoutAcquireFirst() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(1000 * 1000, 128, 24);
+        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
         assertNull(map.getUsing("key", new LongValueNative()));
+
+        map.close();
     }
 
     @Test
@@ -418,6 +553,7 @@ public class SharedHashMapTest {
     @Ignore
     public void testCHMAcquirePerf() throws IOException, ClassNotFoundException, IllegalAccessException, InstantiationException, InterruptedException {
         for (int runs : new int[]{10, 50, 250, 1000, 2500}) {
+            System.out.println("Testing " + runs + " million entries");
             final long entries = runs * 1000 * 1000L;
             final ConcurrentMap<String, AtomicInteger> map = new ConcurrentHashMap<String, AtomicInteger>((int) (entries * 5 / 4), 1.0f, 1024);
 
@@ -492,14 +628,14 @@ public class SharedHashMapTest {
 
     private CharSequence getUserCharSequence(int i) {
         sb.setLength(0);
-        sb.append("ur:");
+        sb.append("u:");
         sb.append(i * 9876); // test 10 digit user numbers.
         return sb;
     }
 
     private static File getPersistenceFile() {
         String TMP = System.getProperty("java.io.tmpdir");
-        File file = new File(TMP + "/shm-test");
+        File file = new File(TMP + "/shm-test" + System.nanoTime());
         file.delete();
         file.deleteOnExit();
         return file;
@@ -515,6 +651,7 @@ public class SharedHashMapTest {
     }
 
     private static void printStatus() {
+        if (!new File("/proc/self/status").exists()) return;
         try {
             BufferedReader br = new BufferedReader(new FileReader("/proc/self/status"));
             for (String line; (line = br.readLine()) != null; )

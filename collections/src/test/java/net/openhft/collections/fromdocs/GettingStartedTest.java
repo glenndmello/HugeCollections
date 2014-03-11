@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package net.openhft.collections;
+package net.openhft.collections.fromdocs;
 
+import net.openhft.collections.SharedHashMapBuilder;
 import org.junit.Test;
 
 import java.io.Closeable;
@@ -44,7 +45,7 @@ public class GettingStartedTest {
                 "  \"value\": \"File\",\n" +
                 "  \"popup\": {\n" +
                 "    \"menuitem\": [\n" +
-                "      {\"value\": \"New\", \"onclick\": \"CreateNewDoc()\"},\n" +
+                "      {\"value\": \"New\", \"onclick\": \"CreateNew()\"},\n" +
                 "      {\"value\": \"Open\", \"onclick\": \"OpenDoc()\"},\n" +
                 "      {\"value\": \"Close\", \"onclick\": \"CloseDoc()\"}\n" +
                 "    ]\n" +

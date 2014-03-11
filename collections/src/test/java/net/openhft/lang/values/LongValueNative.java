@@ -76,6 +76,10 @@ public class LongValueNative implements LongValue, BytesMarshallable, Byteable, 
         return _bytes;
     }
 
+    public long offset() {
+        return _offset;
+    }
+
     public int maxSize() {
         return 8;
     }
