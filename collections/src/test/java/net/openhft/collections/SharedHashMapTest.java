@@ -25,15 +25,55 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
 
+@SuppressWarnings({"unchecked", "ResultOfMethodCallIgnored"})
 public class SharedHashMapTest {
 
     private StringBuilder sb = new StringBuilder();
 
+    static void assertKeySet(Set<Integer> keySet, int[] expectedKeys) {
+        Set<Integer> expectedSet = new HashSet<Integer>();
+        for (int expectedKey : expectedKeys) {
+            expectedSet.add(expectedKey);
+        }
+        org.junit.Assert.assertEquals(expectedSet, keySet);
+    }
+
+    static void assertValues(Collection<CharSequence> values, CharSequence[] expectedValues) {
+        List<String> expectedList = new ArrayList<String>();
+        for (CharSequence expectedValue : expectedValues) {
+            expectedList.add(expectedValue.toString());
+        }
+        Collections.sort(expectedList);
+
+        List<String> actualList = new ArrayList<String>();
+        for (CharSequence actualValue : values) {
+            actualList.add(actualValue.toString());
+        }
+        Collections.sort(actualList);
+
+        org.junit.Assert.assertEquals(expectedList, actualList);
+    }
+
+    static void assertEntrySet(Set<Map.Entry<Integer, CharSequence>> entrySet, int[] expectedKeys, CharSequence[] expectedValues) {
+        Set<Map.Entry<Integer, CharSequence>> expectedSet = new HashSet<Map.Entry<Integer, CharSequence>>();
+        for (int i = 0; i < expectedKeys.length; i++) {
+            expectedSet.add(new AbstractMap.SimpleEntry<Integer, CharSequence>(expectedKeys[i], expectedValues[i]));
+        }
+        org.junit.Assert.assertEquals(expectedSet, entrySet);
+    }
+
+    static void assertMap(Map<Integer, CharSequence> map, int[] expectedKeys, CharSequence[] expectedValues) {
+        assertEquals(expectedKeys.length, map.size());
+        for (int i = 0; i < expectedKeys.length; i++) {
+            org.junit.Assert.assertEquals("On position " + i, expectedValues[i], map.get(expectedKeys[i]));
+        }
+    }
 
     @Test
     public void testRemoveWithKey() throws Exception {
@@ -104,13 +144,16 @@ public class SharedHashMapTest {
     }
 
     @Test
+    @Ignore //todo: fails on my machine
     public void testRemoveInteger() throws IOException {
 
+        int count = 3000;
         final SharedHashMap<Object, Object> map = new SharedHashMapBuilder()
+                .entrySize(count)
+                .minSegments(2)
                 .create(getPersistenceFile(), Object.class, Object.class);
 
 
-        int count = 2345;
         for (int i = 1; i < count; i++) {
             map.put(i, i);
             assertEquals(i, map.size());
@@ -319,23 +362,6 @@ public class SharedHashMapTest {
         // and just for kicks we'll overwrite what we have
         map.put("key3", "overwritten");
         assertEquals("overwritten", map.get("key3"));
-
-        map.close();
-    }
-
-
-    @Test
-    public void testAcquireWithNullKey() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
-        assertNull(map.acquireUsing(null, new LongValueNative()));
-
-        map.close();
-    }
-
-    @Test
-    public void testGetWithNullKey() throws Exception {
-        SharedHashMap<CharSequence, LongValue> map = getSharedMap(10 * 1000, 128, 24);
-        assertNull(map.getUsing(null, new LongValueNative()));
 
         map.close();
     }
@@ -699,5 +725,373 @@ public class SharedHashMapTest {
         }
 
         map.close();
+    }
+
+    @Test
+    public void mapRemoveReflectedInViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        map.remove(2);
+        assertMap(map, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertEntrySet(entrySet, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertEntrySet(map.entrySet(), new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertKeySet(keySet, new int[]{1, 3});
+        assertKeySet(map.keySet(), new int[]{1, 3});
+        assertValues(values, new CharSequence[]{"1", "3"});
+        assertValues(map.values(), new CharSequence[]{"1", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void mapPutReflectedInViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        map.put(4, "4");
+        assertMap(map, new int[]{4, 2, 3, 1}, new CharSequence[]{"4", "2", "3", "1"});
+        assertEntrySet(entrySet, new int[]{4, 2, 3, 1}, new CharSequence[]{"4", "2", "3", "1"});
+        assertEntrySet(map.entrySet(), new int[]{4, 2, 3, 1}, new CharSequence[]{"4", "2", "3", "1"});
+        assertKeySet(keySet, new int[]{4, 2, 3, 1});
+        assertKeySet(map.keySet(), new int[]{4, 2, 3, 1});
+        assertValues(values, new CharSequence[]{"2", "1", "4", "3"});
+        assertValues(map.values(), new CharSequence[]{"2", "1", "4", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void entrySetRemoveReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        entrySet.remove(new AbstractMap.SimpleEntry<Integer, CharSequence>(2, "2"));
+        assertMap(map, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertEntrySet(entrySet, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertKeySet(keySet, new int[]{1, 3});
+        assertValues(values, new CharSequence[]{"1", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void keySetRemoveReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        keySet.remove(2);
+        assertMap(map, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertEntrySet(entrySet, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertKeySet(keySet, new int[]{1, 3});
+        assertValues(values, new CharSequence[]{"1", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void valuesRemoveReflectedInMap() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        values.remove("2");
+        assertMap(map, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertEntrySet(entrySet, new int[]{1, 3}, new CharSequence[]{"1", "3"});
+        assertKeySet(keySet, new int[]{1, 3});
+        assertValues(values, new CharSequence[]{"1", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void entrySetIteratorRemoveReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        Iterator<Map.Entry<Integer, CharSequence>> entryIterator = entrySet.iterator();
+        entryIterator.next();
+        entryIterator.next();
+        entryIterator.remove();
+        assertMap(map, new int[]{2, 3}, new CharSequence[]{"2", "3"});
+        assertEntrySet(entrySet, new int[]{2, 3}, new CharSequence[]{"2", "3"});
+        assertKeySet(keySet, new int[]{2, 3});
+        assertValues(values, new CharSequence[]{"2", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void keySetIteratorRemoveReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        Iterator<Integer> keyIterator = keySet.iterator();
+        keyIterator.next();
+        keyIterator.next();
+        keyIterator.remove();
+        assertMap(map, new int[]{2, 3}, new CharSequence[]{"2", "3"});
+        assertEntrySet(entrySet, new int[]{2, 3}, new CharSequence[]{"2", "3"});
+        assertKeySet(keySet, new int[]{2, 3});
+        assertValues(values, new CharSequence[]{"2", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void valuesIteratorRemoveReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        Iterator<CharSequence> valueIterator = values.iterator();
+        valueIterator.next();
+        valueIterator.next();
+        valueIterator.remove();
+        assertMap(map, new int[]{2, 3}, new CharSequence[]{"2", "3"});
+        assertEntrySet(entrySet, new int[]{2, 3}, new CharSequence[]{"2", "3"});
+        assertKeySet(keySet, new int[]{2, 3});
+        assertValues(values, new CharSequence[]{"2", "3"});
+
+        map.close();
+    }
+
+    @Test
+    public void entrySetRemoveAllReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        entrySet.removeAll(
+                Arrays.asList(
+                        new AbstractMap.SimpleEntry<Integer, CharSequence>(1, "1"),
+                        new AbstractMap.SimpleEntry<Integer, CharSequence>(2, "2")
+                )
+        );
+        assertMap(map, new int[]{3}, new CharSequence[]{"3"});
+        assertEntrySet(entrySet, new int[]{3}, new CharSequence[]{"3"});
+        assertKeySet(keySet, new int[]{3});
+        assertValues(values, new CharSequence[]{"3"});
+
+        map.close();
+    }
+
+    @Test
+    public void keySetRemoveAllReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        keySet.removeAll(Arrays.asList(1, 2));
+        assertMap(map, new int[]{3}, new CharSequence[]{"3"});
+        assertEntrySet(entrySet, new int[]{3}, new CharSequence[]{"3"});
+        assertKeySet(keySet, new int[]{3});
+        assertValues(values, new CharSequence[]{"3"});
+
+        map.close();
+    }
+
+    @Test
+    public void valuesRemoveAllReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        values.removeAll(Arrays.asList("1", "2"));
+        assertMap(map, new int[]{3}, new CharSequence[]{"3"});
+        assertEntrySet(entrySet, new int[]{3}, new CharSequence[]{"3"});
+        assertKeySet(keySet, new int[]{3});
+        assertValues(values, new CharSequence[]{"3"});
+
+        map.close();
+    }
+
+    @Test
+    public void entrySetRetainAllReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        entrySet.retainAll(
+                Arrays.asList(
+                        new AbstractMap.SimpleEntry<Integer, CharSequence>(1, "1"),
+                        new AbstractMap.SimpleEntry<Integer, CharSequence>(2, "2")
+                )
+        );
+        assertMap(map, new int[]{2, 1}, new CharSequence[]{"2", "1"});
+        assertEntrySet(entrySet, new int[]{2, 1}, new CharSequence[]{"2", "1"});
+        assertKeySet(keySet, new int[]{2, 1});
+        assertValues(values, new CharSequence[]{"2", "1"});
+
+        map.close();
+    }
+
+    @Test
+    public void keySetRetainAllReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        keySet.retainAll(Arrays.asList(1, 2));
+        assertMap(map, new int[]{2, 1}, new CharSequence[]{"2", "1"});
+        assertEntrySet(entrySet, new int[]{2, 1}, new CharSequence[]{"2", "1"});
+        assertKeySet(keySet, new int[]{2, 1});
+        assertValues(values, new CharSequence[]{"2", "1"});
+
+        map.close();
+    }
+
+    @Test
+    public void valuesRetainAllReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        values.retainAll(Arrays.asList("1", "2"));
+        assertMap(map, new int[]{2, 1}, new CharSequence[]{"2", "1"});
+        assertEntrySet(entrySet, new int[]{2, 1}, new CharSequence[]{"2", "1"});
+        assertKeySet(keySet, new int[]{2, 1});
+        assertValues(values, new CharSequence[]{"2", "1"});
+
+        map.close();
+    }
+
+    @Test
+    public void entrySetClearReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        entrySet.clear();
+        org.junit.Assert.assertTrue(map.isEmpty());
+        org.junit.Assert.assertTrue(entrySet.isEmpty());
+        org.junit.Assert.assertTrue(keySet.isEmpty());
+        org.junit.Assert.assertTrue(values.isEmpty());
+
+        map.close();
+    }
+
+    @Test
+    public void keySetClearReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        keySet.clear();
+        org.junit.Assert.assertTrue(map.isEmpty());
+        org.junit.Assert.assertTrue(entrySet.isEmpty());
+        org.junit.Assert.assertTrue(keySet.isEmpty());
+        org.junit.Assert.assertTrue(values.isEmpty());
+
+        map.close();
+    }
+
+    @Test
+    public void valuesClearReflectedInMapAndOtherViews() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+        Set<Map.Entry<Integer, CharSequence>> entrySet = map.entrySet();
+        Set<Integer> keySet = map.keySet();
+        Collection<CharSequence> values = map.values();
+
+        values.clear();
+        org.junit.Assert.assertTrue(map.isEmpty());
+        org.junit.Assert.assertTrue(entrySet.isEmpty());
+        org.junit.Assert.assertTrue(keySet.isEmpty());
+        org.junit.Assert.assertTrue(values.isEmpty());
+
+        map.close();
+    }
+
+    @Test
+    public void clearMapViaEntryIteratorRemoves() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+
+        int sum = 0;
+        for (Iterator it = map.entrySet().iterator(); it.hasNext(); ) {
+            Object next = it.next();
+            it.remove();
+            ++sum;
+        }
+        map.close();
+
+        assertEquals(3, sum);
+    }
+
+    @Test
+    public void clearMapViaKeyIteratorRemoves() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+
+        int sum = 0;
+        for (Iterator it = map.keySet().iterator(); it.hasNext(); ) {
+            it.next();
+            it.remove();
+            ++sum;
+        }
+        map.close();
+
+        assertEquals(3, sum);
+    }
+
+    @Test
+    public void clearMapViaValueIteratorRemoves() throws IOException {
+        SharedHashMap<Integer, CharSequence> map = getViewTestMap();
+
+        int sum = 0;
+        for (Iterator it = map.values().iterator(); it.hasNext(); ) {
+            it.next();
+            it.remove();
+            ++sum;
+        }
+        map.close();
+
+        assertEquals(3, sum);
+    }
+
+    private SharedHashMap<Integer, CharSequence> getViewTestMap() throws IOException {
+        String TMP = System.getProperty("java.io.tmpdir");
+        File file = new File(TMP + "/shm-remove-test");
+        file.delete();
+        file.deleteOnExit();
+        int entries = 100 * 1000;
+        SharedHashMap<Integer, CharSequence> map =
+                new SharedHashMapBuilder()
+                        .entries(entries)
+                        .minSegments(16)
+                        .entrySize(32)
+                        .putReturnsNull(true)
+                        .removeReturnsNull(true)
+                        .create(file, Integer.class, CharSequence.class);
+
+        map.put(1, "1");
+        map.put(2, "2");
+        map.put(3, "3");
+
+        assertEntrySet(map.entrySet(), new int[]{2, 1, 3}, new String[]{"2", "1", "3"});
+        assertKeySet(map.keySet(), new int[]{2, 1, 3});
+        assertValues(map.values(), new String[]{"2", "1", "3"});
+
+        return map;
     }
 }

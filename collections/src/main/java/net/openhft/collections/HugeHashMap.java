@@ -24,7 +24,7 @@ import net.openhft.lang.io.MultiStoreBytes;
 import net.openhft.lang.io.NativeBytes;
 import net.openhft.lang.io.serialization.BytesMarshallable;
 import net.openhft.lang.io.serialization.impl.VanillaBytesMarshallerFactory;
-import org.jetbrains.annotations.NotNull;
+import net.openhft.lang.model.constraints.NotNull;
 
 import java.util.*;
 
@@ -39,9 +39,6 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
 //    private final Class<V> vClass;
 
     transient Set<Map.Entry<K, V>> entrySet;
-    transient Set<K> keySet;
-    transient Collection<V> values;
-
 
 
     public HugeHashMap() {
@@ -103,18 +100,6 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
     @Override
     public Set<Entry<K, V>> entrySet() {
         return (entrySet != null) ? entrySet : (entrySet = new EntrySet());
-    }
-
-    @NotNull
-    @Override
-    public Set<K> keySet() {
-        return (keySet != null) ? keySet : (keySet = new KeySet());
-    }
-
-    @NotNull
-    @Override
-    public Collection<V> values() {
-        return (values != null) ? values : (values = new Values());
     }
 
     @Override
@@ -389,28 +374,6 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             return (V) bytes.readObject();
         }
 
-        synchronized K getNextKey(K prevKey) {
-            int pos;
-            if (prevKey == null) {
-                pos = smallMap.firstPos();
-            } else {
-                int hash = hasher.segmentHash(hasher.hash(prevKey));
-                pos = smallMap.nextKeyAfter(hash);
-            }
-            while (true) {
-                if (pos < 0) {
-                    return null;
-                } else {
-                    bytes.storePositionAndSize(store, pos * smallEntrySize, smallEntrySize);
-                    K key = getKey();
-                    if (prevKey == null || !equals(key, prevKey)) {
-                        return key;
-                    }
-                }
-                pos = smallMap.nextPos();
-            }
-        }
-
         synchronized Entry<K, V> getNextEntry(K prevKey) {
             try {
                 int pos;
@@ -529,104 +492,6 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
         }
     }
 
-    final class KeyIterator implements Iterator<K> {
-
-        int segmentIndex = segments.length - 1;
-
-        K nextKey, lastReturned;
-
-        K lastSegmentKey;
-
-        KeyIterator() {
-            nextKey = nextSegmentKey();
-        }
-
-        public K next() {
-            K e = nextKey;
-            if (e == null)
-                throw new NoSuchElementException();
-            lastReturned = e; // cannot assign until after null check
-            nextKey = nextSegmentKey();
-            return e;
-        }
-
-        @Override
-        public boolean hasNext() {
-            return nextKey != null;
-        }
-
-        @Override
-        public void remove() {
-            if (lastReturned == null) throw new IllegalStateException();
-            HugeHashMap.this.remove(lastReturned);
-            lastReturned = null;
-        }
-
-        private K nextSegmentKey() {
-            while (segmentIndex >= 0) {
-                Segment<K, V> segment = segments[segmentIndex];
-                K key = segment.getNextKey(lastSegmentKey);
-                if (key == null) {
-                    segmentIndex--;
-                    lastSegmentKey = null;
-                } else {
-                    lastSegmentKey = key;
-                    return key;
-                }
-            }
-            return null;
-        }
-    }
-
-    final class ValueIterator implements Iterator<V> {
-
-        int segmentIndex = segments.length - 1;
-
-        Map.Entry<K, V> nextEntry, lastReturned;
-
-        K lastSegmentKey;
-
-        ValueIterator() {
-            nextEntry = nextSegmentEntry();
-        }
-
-        public V next() {
-            Entry<K, V> e = nextEntry;
-            if (e == null)
-                throw new NoSuchElementException();
-            lastReturned = e; // cannot assign until after null check
-            nextEntry = nextSegmentEntry();
-            return e.getValue();
-        }
-
-        @Override
-        public boolean hasNext() {
-            return nextEntry != null;
-        }
-
-        @Override
-        public void remove() {
-            if (lastReturned == null) throw new IllegalStateException();
-            HugeHashMap.this.remove(lastReturned.getKey(), lastReturned.getValue());
-            lastReturned = null;
-        }
-
-        private Entry<K, V> nextSegmentEntry() {
-            while (segmentIndex >= 0) {
-                Segment<K, V> segment = segments[segmentIndex];
-                Entry<K, V> entry = segment.getNextEntry(lastSegmentKey);
-                if (entry == null) {
-                    segmentIndex--;
-                    lastSegmentKey = null;
-                } else {
-                    lastSegmentKey = entry.getKey();
-                    return entry;
-                }
-            }
-            return null;
-        }
-    }
-
     final class EntryIterator implements Iterator<Entry<K, V>> {
 
         int segmentIndex = segments.length - 1;
@@ -639,6 +504,16 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             nextEntry = nextSegmentEntry();
         }
 
+        public boolean hasNext() {
+            return nextEntry != null;
+        }
+
+        public void remove() {
+            if (lastReturned == null) throw new IllegalStateException();
+            HugeHashMap.this.remove(lastReturned.getKey());
+            lastReturned = null;
+        }
+
         public Map.Entry<K, V> next() {
             Entry<K, V> e = nextEntry;
             if (e == null)
@@ -648,19 +523,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             return e;
         }
 
-        @Override
-        public boolean hasNext() {
-            return nextEntry != null;
-        }
-
-        @Override
-        public void remove() {
-            if (lastReturned == null) throw new IllegalStateException();
-            HugeHashMap.this.remove(lastReturned.getKey());
-            lastReturned = null;
-        }
-
-        private Entry<K, V> nextSegmentEntry() {
+        Entry<K, V> nextSegmentEntry() {
             while (segmentIndex >= 0) {
                 Segment<K, V> segment = segments[segmentIndex];
                 Entry<K, V> entry = segment.getNextEntry(lastSegmentKey);
@@ -674,45 +537,7 @@ public class HugeHashMap<K, V> extends AbstractMap<K, V> implements HugeMap<K, V
             }
             return null;
         }
-    }
 
-    final class KeySet extends AbstractSet<K> {
-        public Iterator<K> iterator() {
-            return new KeyIterator();
-        }
-        public int size() {
-            return HugeHashMap.this.size();
-        }
-        public boolean isEmpty() {
-            return HugeHashMap.this.isEmpty();
-        }
-        public boolean contains(Object o) {
-            return HugeHashMap.this.containsKey(o);
-        }
-        public boolean remove(Object o) {
-            return HugeHashMap.this.remove(o) != null;
-        }
-        public void clear() {
-            HugeHashMap.this.clear();
-        }
-    }
-
-    final class Values extends AbstractCollection<V> {
-        public Iterator<V> iterator() {
-            return new ValueIterator();
-        }
-        public int size() {
-            return HugeHashMap.this.size();
-        }
-        public boolean isEmpty() {
-            return HugeHashMap.this.isEmpty();
-        }
-        public boolean contains(Object o) {
-            return HugeHashMap.this.containsValue(o);
-        }
-        public void clear() {
-            HugeHashMap.this.clear();
-        }
     }
 
     final class EntrySet extends AbstractSet<Map.Entry<K, V>> {
