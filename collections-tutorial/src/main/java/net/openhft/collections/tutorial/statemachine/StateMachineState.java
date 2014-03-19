@@ -21,6 +21,7 @@ package net.openhft.collections.tutorial.statemachine;
 public enum StateMachineState {
     WORKING(-2),
     UNKNOWN(-1),
+    STATE_0(0),
     STATE_1(1),
     STATE_2(2),
     STATE_3(3)

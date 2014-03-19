@@ -40,23 +40,24 @@ public class StateMachineProcessor implements Runnable {
         this.iterations = iterations;
         this.from = from;
         this.to = to;
-        this.logger = LoggerFactory.getLogger("StateMachineProcessor-" + from.name());
+        this.logger = LoggerFactory.getLogger(String.format("%s => %s",from.name(),to.name()));
 
     }
 
     @Override
     public void run() {
         for(int i=0;i<iterations;i++) {
+            this.logger.info("Wait for {}",this.from);
             smd.waitForState(this.from,StateMachineState.WORKING);
 
-            this.logger.debug("{}/{} Status {}, Next {}",
+            this.logger.info("{}/{} Status {}, Next {}",
                 i,
                 iterations,
                 this.from,
                 this.to);
 
             smd.setStateData(from.value());
-            smd.setState(to);
+            smd.setState(StateMachineState.WORKING,to);
         }
     }
 }

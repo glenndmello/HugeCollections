@@ -37,13 +37,17 @@ public class StateMachineData implements Byteable {
     //
     // *************************************************************************
 
+
     /**
      *
-     * @param state
+     * @param from
+     * @param to
      */
-    public void setState(StateMachineState state) {
+    public void setState(StateMachineState from, StateMachineState to) {
         if(this.bytes != null) {
-            this.bytes.writeInt(this.offset,state.value());
+            while(!this.bytes.compareAndSwapInt(this.offset,from.value(),to.value())) {
+                Thread.yield();
+            }
         }
     }
 

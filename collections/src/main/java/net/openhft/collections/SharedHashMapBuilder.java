@@ -47,7 +47,7 @@ public class SharedHashMapBuilder implements Cloneable {
     private boolean removeReturnsNull = false;
     private boolean generatedKeyType = false;
     private boolean generatedValueType = false;
-
+    private boolean largeSegments = false;
 
     @Override
     public SharedHashMapBuilder clone() {
@@ -60,7 +60,7 @@ public class SharedHashMapBuilder implements Cloneable {
 
     /**
      * Set minimum number of segments.
-     * <p/>
+     * <p></p>
      * See concurrencyLevel in {@link java.util.concurrent.ConcurrentHashMap}.
      *
      * @return this builder object back
@@ -112,8 +112,12 @@ public class SharedHashMapBuilder implements Cloneable {
             return actualEntriesPerSegment;
         // round up to the next multiple of 64.
         int as = actualSegments();
-        int aeps = (int) (Math.max(1, entries * 2L / as) + 63) & ~63;
+        int aeps = segmentsForEntries(as);
         return aeps;
+    }
+
+    private int segmentsForEntries(int as) {
+        return (int) (Math.max(1, entries * 2L / as) + 63) & ~63;
     }
 
     public SharedHashMapBuilder actualSegments(int actualSegments) {
@@ -124,6 +128,12 @@ public class SharedHashMapBuilder implements Cloneable {
     public int actualSegments() {
         if (actualSegments > 0)
             return actualSegments;
+        if (!largeSegments && entries > (long) minSegments << 15) {
+            long segments = Maths.nextPower2(entries >> 15, 128);
+            if (segments < 1 << 20)
+                return (int) segments;
+        }
+        // try to keep it 16-bit sizes segments
         return (int) Maths.nextPower2(Math.max((entries >> 30) + 1, minSegments), 1);
     }
 
@@ -171,7 +181,8 @@ public class SharedHashMapBuilder implements Cloneable {
         if (bb.remaining() < 22) throw new IOException("File too small, corrupted? " + file);
         byte[] bytes = new byte[8];
         bb.get(bytes);
-        if (!Arrays.equals(bytes, MAGIC)) throw new IOException("Unknown magic number, was " + new String(bytes, 0));
+        if (!Arrays.equals(bytes, MAGIC))
+            throw new IOException("Unknown magic number, was " + new String(bytes, "ISO-8859-1"));
         builder.actualSegments(bb.getInt());
         builder.actualEntriesPerSegment(bb.getInt());
         builder.entrySize(bb.getInt());
@@ -216,11 +227,11 @@ public class SharedHashMapBuilder implements Cloneable {
     }
 
     /**
-     * {@link this.put()} returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
+     * Map.put() returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
      * In the case, for an off heap collection, it has to create a new object (or return a recycled one)
      * Either way it's expensive for something you probably don't use.
      *
-     * @param putReturnsNull false if you want {@link this.put()} to not return the object that was replaced but instead return null
+     * @param putReturnsNull false if you want SharedHashMap.put() to not return the object that was replaced but instead return null
      */
     public SharedHashMapBuilder putReturnsNull(boolean putReturnsNull) {
         this.putReturnsNull = putReturnsNull;
@@ -228,22 +239,22 @@ public class SharedHashMapBuilder implements Cloneable {
     }
 
     /**
-     * {@link this.put()} returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
+     * Map.put() returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
      * In the case, for an off heap collection, it has to create a new object (or return a recycled one)
      * Either way it's expensive for something you probably don't use.
      *
-     * @return true if {@link this.put()} is not going to return the object that was replaced but instead return null
+     * @return true if SharedHashMap.put() is not going to return the object that was replaced but instead return null
      */
     public boolean putReturnsNull() {
         return putReturnsNull;
     }
 
     /**
-     * {@link this.remove()}  returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
+     * Map.remove()  returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
      * In the case, for an off heap collection, it has to create a new object (or return a recycled one)
      * Either way it's expensive for something you probably don't use.
      *
-     * @param removeReturnsNull false if you want {@link this.remove()} to not return the object that was removed but instead return null
+     * @param removeReturnsNull false if you want SharedHashMap.remove() to not return the object that was removed but instead return null
      */
     public SharedHashMapBuilder removeReturnsNull(boolean removeReturnsNull) {
         this.removeReturnsNull = removeReturnsNull;
@@ -252,11 +263,11 @@ public class SharedHashMapBuilder implements Cloneable {
 
 
     /**
-     * {@link this.put()} returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
+     * Map.remove() returns the previous value, functionality which is rarely used but fairly cheap for HashMap.
      * In the case, for an off heap collection, it has to create a new object (or return a recycled one)
      * Either way it's expensive for something you probably don't use.
      *
-     * @return true if {@link this.remove()} is not going to return the object that was removed but instead return null
+     * @return true if SharedHashMap.remove() is not going to return the object that was removed but instead return null
      */
     public boolean removeReturnsNull() {
         return removeReturnsNull;
@@ -277,6 +288,15 @@ public class SharedHashMapBuilder implements Cloneable {
 
     public SharedHashMapBuilder generatedValueType(boolean generatedValueType) {
         this.generatedValueType = generatedValueType;
+        return this;
+    }
+
+    public boolean largeSegments() {
+        return entries > 1L << (20 + 15) || largeSegments;
+    }
+
+    public SharedHashMapBuilder largeSegments(boolean largeSegments) {
+        this.largeSegments = largeSegments;
         return this;
     }
 
@@ -305,7 +325,7 @@ public class SharedHashMapBuilder implements Cloneable {
     public String toString() {
         return "SharedHashMapBuilder{" +
                 "actualSegments=" + actualSegments() +
-                ", minSegments=" + minSegments() +
+                (actualSegments > 0 ? ", actualSegments=" + actualSegments() : ", minSegments=" + minSegments()) +
                 ", actualEntriesPerSegment=" + actualEntriesPerSegment() +
                 ", entrySize=" + entrySize() +
                 ", entries=" + entries() +
@@ -317,6 +337,7 @@ public class SharedHashMapBuilder implements Cloneable {
                 ", removeReturnsNull=" + removeReturnsNull() +
                 ", generatedKeyType=" + generatedKeyType() +
                 ", generatedValueType=" + generatedValueType() +
+                ", largeSegments=" + largeSegments() +
                 ", metaDataBytes=" + metaDataBytes() +
                 ", eventListener=" + eventListener() +
                 '}';

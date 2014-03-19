@@ -40,11 +40,11 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
     private static final int UNSET_VALUE = Integer.MIN_VALUE;
     /**
      * hash is in 32 higher order bits, because in Intel's little-endian
-     * they are written first in memory, and in memory we have keys and statemachine
+     * they are written first in memory, and in memory we have keys and values
      * in natural order: 4 bytes of k1, 4 bytes of v1, 4 bytes of k2, ...
      * and this is somehow compatible with previous version of this class,
-     * where keys were written before statemachine explicitly.
-     * <p/>
+     * where keys were written before values explicitly.
+     * <p></p>
      * However, this layout increases latency of map operations
      * by 1 clock cycle :), because we always need to perform shift to obtain
      * the key between memory read and comparison with UNSET_KEY.
@@ -125,31 +125,12 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
         }
         if (removedPos < 0)
             return false;
-<<<<<<< HEAD
-        int pos2 = pos;
-        // now work back up the chain from pos to pos0;
-        // Note: because of the mask, the pos can be actually less than pos0,
-        // thus using != operator instead of >=
-        while (pos != pos0) {
-            pos = (pos - ENTRY_SIZE) & capacityMask2;
-            long entry = bytes.readLong(pos);
-//            int hash2 = bytes.readInt(pos + KEY);
-            int hash2 = (int) (entry >> 32);
-            if (hash2 == key) {
-                // swap statemachine and zeroOut
-                if (pos != pos0) {
-                    long entry2 = bytes.readLong(pos);
-                    bytes.writeLong(pos0, entry2);
-                }
-                bytes.writeLong(pos, UNSET_ENTRY);
-=======
         long posToShift = removedPos;
         for (int i = 0; i <= capacityMask; i++) {
             posToShift = (posToShift + ENTRY_SIZE) & capacityMask2;
             long entryToShift = bytes.readLong(posToShift);
             int hash = (int) (entryToShift >> 32);
             if (hash == UNSET_KEY)
->>>>>>> master
                 break;
             long insertPos = indexToPos(hash & capacityMask);
             // the following condition essentially means circular permutations
@@ -167,22 +148,7 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
                 removedPos = posToShift;
             }
         }
-<<<<<<< HEAD
-        pos = (pos + ENTRY_SIZE) & capacityMask2;
-        // re-inset any statemachine in between pos and pos2.
-        while (pos < pos2) {
-            long entry2 = bytes.readLong(pos);
-            int hash2 = (int) (entry2 >> 32);
-            int value2 = (int) entry2;
-            // zeroOut the entry
-            bytes.writeLong(pos, UNSET_ENTRY);
-            // this might put it back in the same place or a different one.
-            put(hash2, value2);
-            pos = (pos + ENTRY_SIZE) & capacityMask2;
-        }
-=======
         bytes.writeLong(removedPos, UNSET_ENTRY);
->>>>>>> master
         return true;
     }
 
@@ -191,36 +157,6 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
 
     private int searchHash = -1;
     private long searchPos = -1;
-
-    @Override
-    public int firstPos() {
-        int pos = 0;
-        long capacityPos = indexToPos(capacity);
-        while (pos < capacityPos) {
-            long entry = bytes.readLong(pos);
-            int hash2 = (int) (entry >> 32);
-            if (hash2 != UNSET_KEY) {
-                return (int) entry;
-            }
-            pos = pos + ENTRY_SIZE;
-        }
-        return -1;
-    }
-
-    @Override
-    public int nextKeyAfter(int key) { //todo: merge implementation with first position method
-        startSearch(key);
-        long capacityPos = indexToPos(capacity);
-        while (searchPos < capacityPos) {
-            long entry = bytes.readLong(searchPos);
-            int hash2 = (int) (entry >> 32);
-            if (hash2 != UNSET_KEY && hash2 != searchHash) {
-                return (int) entry;
-            }
-            searchPos = searchPos + ENTRY_SIZE;
-        }
-        return -1;
-    }
 
     @Override
     public int startSearch(int key) {
@@ -271,8 +207,9 @@ class VanillaIntIntMultiMap implements IntIntMultiMap {
             long entry = bytes.readLong(pos);
             int key = (int) (entry >> 32);
             int value = (int) entry;
-            if (key != UNSET_KEY)
+            if (key != UNSET_KEY) {
                 action.accept(key, value);
+            }
         }
     }
 
