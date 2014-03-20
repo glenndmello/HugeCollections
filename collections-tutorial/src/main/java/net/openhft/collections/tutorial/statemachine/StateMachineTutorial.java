@@ -63,12 +63,15 @@ public class StateMachineTutorial {
     public static void trigger(final SharedHashMap<Integer, StateMachineData> map) throws Exception{
         final StateMachineData smd  = map.acquireUsing(0, new StateMachineData());
 
-        LOGGER.info("Old state is: {}",smd.getState());
+        StateMachineState st = smd.getState();
+        LOGGER.info("Old state is: {}",st);
 
-        //fire the first state change
-        smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
+        if(st == StateMachineState.STATE_0) {
+            //fire the first state change
+            smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
 
-        LOGGER.info("New state is: {}",smd.getState());
+            LOGGER.info("New state is: {}",smd.getState());
+        }
     }
 
     /**
@@ -79,12 +82,11 @@ public class StateMachineTutorial {
      * @throws Exception
      */
     public static void runProcessor(final SharedHashMap<Integer, StateMachineData> map,StateMachineState from,StateMachineState to) throws Exception {
-        final StateMachineData smd  = map.acquireUsing(0,new StateMachineData());
-        final Runnable processor = new StateMachineProcessor(smd,5,from,to);
-
-        final Thread th = new Thread(processor);
-        th.start();
-        th.join();
+        new StateMachineProcessor(
+            map.acquireUsing(0,new StateMachineData()),
+            5,
+            from,
+            to).run();
     }
 
     // *************************************************************************
