@@ -23,41 +23,51 @@ import org.slf4j.LoggerFactory;
  */
 public class StateMachineProcessor implements Runnable {
     private final StateMachineData smd;
-    private final int iterations;
     private final StateMachineState from;
+    private final StateMachineState transition;
     private final StateMachineState to;
     private final Logger logger;
 
     /**
      *
      * @param smd
-     * @param iterations
      * @param from
      * @param to
      */
-    public StateMachineProcessor(final StateMachineData smd, int iterations, StateMachineState from,StateMachineState to) {
+    public StateMachineProcessor(final StateMachineData smd, StateMachineState from,StateMachineState transition, StateMachineState to) {
         this.smd = smd;
-        this.iterations = iterations;
         this.from = from;
+        this.transition = transition;
         this.to = to;
-        this.logger = LoggerFactory.getLogger(String.format("%s => %s",from.name(),to.name()));
 
+        this.logger = LoggerFactory.getLogger(
+            String.format("%s => %s => %s",from.name(),transition.name(),to.name())
+        );
     }
 
     @Override
     public void run() {
-        for(int i=0;i<iterations;i++) {
-            this.logger.info("Wait for {}",this.from);
-            smd.waitForState(this.from,StateMachineState.WORKING);
+        while(!smd.done()) {
+            if (smd.stateIn(transition)) {
+                doProcess();
+            }
 
-            this.logger.info("{}/{} Status {}, Next {}",
-                i,
-                iterations,
-                this.from,
-                this.to);
+            logger.info("Wait for {}", from);
+            smd.waitForState(from, transition);
 
-            smd.setStateData(from.value());
-            smd.setState(StateMachineState.WORKING,to);
+            doProcess();
         }
+    }
+
+    private void doProcess() {
+        smd.incStateData();
+
+        logger.info("Status {}, Next {}, Data {}",
+            from,
+            to,
+            smd.getStateData()
+        );
+
+        smd.setState(transition,to);
     }
 }

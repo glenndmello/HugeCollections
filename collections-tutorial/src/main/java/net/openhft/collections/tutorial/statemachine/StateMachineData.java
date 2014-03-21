@@ -37,6 +37,31 @@ public class StateMachineData implements Byteable {
     //
     // *************************************************************************
 
+    /**
+     *
+     * @param states
+     * @return
+     */
+    public boolean stateIn(StateMachineState... states) {
+        StateMachineState currentState = getState();
+        for(StateMachineState state : states) {
+            if(state == currentState) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     *
+     * @param state
+     */
+    public void setState(StateMachineState state) {
+        if(this.bytes != null) {
+            this.bytes.writeInt(this.offset,state.value());
+        }
+    }
 
     /**
      *
@@ -58,7 +83,7 @@ public class StateMachineData implements Byteable {
     public StateMachineState getState() {
         int value = -1;
         if(this.bytes != null) {
-            value = this.bytes.readInt(this.offset);
+            value = this.bytes.readVolatileInt(this.offset);
         }
 
         return StateMachineState.fromValue(value);
@@ -77,6 +102,10 @@ public class StateMachineData implements Byteable {
         }
     }
 
+    // *************************************************************************
+    //
+    // *************************************************************************
+
     /**
      *
      * @param data
@@ -93,10 +122,34 @@ public class StateMachineData implements Byteable {
      */
     public int getStateData() {
         if(this.bytes != null) {
-            return this.bytes.readInt(this.offset + 4);
+            return this.bytes.readVolatileInt(this.offset + 4);
         }
 
         return -1;
+    }
+
+    /**
+     *
+     * @return
+     */
+    public int incStateData() {
+        if(this.bytes != null) {
+            return this.bytes.addInt(this.offset + 4,1);
+        }
+
+        return -1;
+    }
+
+    /**
+     *
+     * @return
+     */
+    public boolean done() {
+        if(this.bytes != null) {
+            return getStateData() > 100;
+        }
+
+        return true;
     }
 
     // *************************************************************************

@@ -44,49 +44,22 @@ public class StateMachineTutorial {
         final StateMachineData smd  = map.acquireUsing(0,new StateMachineData());
         final ExecutorService  esvc = Executors.newFixedThreadPool(3);
 
-        esvc.execute(new StateMachineProcessor(smd,5,StateMachineState.STATE_1,StateMachineState.STATE_2));
-        esvc.execute(new StateMachineProcessor(smd,5,StateMachineState.STATE_2,StateMachineState.STATE_3));
-        esvc.execute(new StateMachineProcessor(smd,5,StateMachineState.STATE_3,StateMachineState.STATE_1));
+        //reset state
+        smd.setStateData(0);
+        smd.setState(StateMachineState.STATE_0);
+
+        esvc.execute(new StateMachineProcessor(
+            smd,StateMachineState.STATE_1,StateMachineState.STATE_1_WORKING,StateMachineState.STATE_2));
+        esvc.execute(new StateMachineProcessor(
+            smd,StateMachineState.STATE_2,StateMachineState.STATE_2_WORKING,StateMachineState.STATE_3));
+        esvc.execute(new StateMachineProcessor(
+            smd,StateMachineState.STATE_3,StateMachineState.STATE_3_WORKING,StateMachineState.STATE_1));
 
         //fire the first state change
         smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
 
         esvc.shutdown();
         esvc.awaitTermination(10, TimeUnit.SECONDS);
-    }
-
-    /**
-     *
-     * @param map
-     * @throws Exception
-     */
-    public static void trigger(final SharedHashMap<Integer, StateMachineData> map) throws Exception{
-        final StateMachineData smd  = map.acquireUsing(0, new StateMachineData());
-
-        StateMachineState st = smd.getState();
-        LOGGER.info("Old state is: {}",st);
-
-        if(st == StateMachineState.STATE_0) {
-            //fire the first state change
-            smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
-
-            LOGGER.info("New state is: {}",smd.getState());
-        }
-    }
-
-    /**
-     *
-     * @param map
-     * @param from
-     * @param to
-     * @throws Exception
-     */
-    public static void runProcessor(final SharedHashMap<Integer, StateMachineData> map,StateMachineState from,StateMachineState to) throws Exception {
-        new StateMachineProcessor(
-            map.acquireUsing(0,new StateMachineData()),
-            5,
-            from,
-            to).run();
     }
 
     // *************************************************************************
@@ -100,9 +73,9 @@ public class StateMachineTutorial {
      */
     private static SharedHashMap<Integer, StateMachineData> getSharedHashMap() throws Exception {
         return new SharedHashMapBuilder()
-            .entries(10)
+            .entries(8)
             .minSegments(128)
-            .entrySize(24)
+            .entrySize(128)
             .create(
                 getPersistenceFile(),
                 Integer.class,
@@ -136,25 +109,33 @@ public class StateMachineTutorial {
                 StateMachineTutorial.stateMachineDemo(map);
             } else {
                 if("0".equals(args[0])) {
-                    StateMachineTutorial.trigger(map);
+                    StateMachineData smd =
+                        map.acquireUsing(0, new StateMachineData());
+
+                    StateMachineState st = smd.getState();
+                    if(st == StateMachineState.STATE_0) {
+                        //fire the first state change
+                        smd.setStateData(0);
+                        smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
+                    }
                 } else if("1".equals(args[0])) {
-                    StateMachineTutorial.runProcessor(
-                        map,
+                    new StateMachineProcessor(
+                        map.acquireUsing(0,new StateMachineData()),
                         StateMachineState.STATE_1,
-                        StateMachineState.STATE_2
-                    );
+                        StateMachineState.STATE_1_WORKING,
+                        StateMachineState.STATE_2).run();
                 } else if("2".equals(args[0])) {
-                    StateMachineTutorial.runProcessor(
-                        map,
+                    new StateMachineProcessor(
+                        map.acquireUsing(0,new StateMachineData()),
                         StateMachineState.STATE_2,
-                        StateMachineState.STATE_3
-                    );
+                        StateMachineState.STATE_2_WORKING,
+                        StateMachineState.STATE_3).run();
                 } else if("3".equals(args[0])) {
-                    StateMachineTutorial.runProcessor(
-                        map,
+                    new StateMachineProcessor(
+                        map.acquireUsing(0,new StateMachineData()),
                         StateMachineState.STATE_3,
-                        StateMachineState.STATE_1
-                    );
+                        StateMachineState.STATE_3_WORKING,
+                        StateMachineState.STATE_1).run();
                 }
             }
         } finally {
