@@ -264,6 +264,11 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
   ```
 
 
+Notes:
+* This example is quite aggressive as each processor watches for changes in a busy-loop 
+* One beautiful side effect of SharedHashMap used as IPC system is that a process can start and resume very quickly as the data and state information are immediately available 
+
+
 [Here] (https://github.com/lburgazzoli/HugeCollections/tree/HFT-LEARN/collections-tutorial/src/main/java/net/openhft/collections/tutorial/statemachine) the full example.
 
 
