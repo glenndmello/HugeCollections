@@ -143,13 +143,13 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
       public void run() {
           // Loop untill a shared done event is set
           while(!smd.done()) {
-              // If the was interrupted while working on this transition, restart
-              // from it
+              // If the processor was interrupted while working on this transition
+              // resume it
               if (smd.stateIn(transition)) {
                   doProcess();
               }
   
-              // Wait for a state iteraction
+              // Wait for a state transition
               logger.info("Wait for {}", from);
               smd.waitForState(from, transition);
   
