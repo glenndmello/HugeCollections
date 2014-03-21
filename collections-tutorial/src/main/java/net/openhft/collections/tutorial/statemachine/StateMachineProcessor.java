@@ -70,4 +70,15 @@ public class StateMachineProcessor implements Runnable {
 
         smd.setState(transition,to);
     }
+
+    /**
+     *
+     * @param smd
+     * @param from
+     * @param transition
+     * @param to
+     */
+    public static void runProcessor(final StateMachineData smd, StateMachineState from,StateMachineState transition, StateMachineState to) {
+        new StateMachineProcessor(smd,from,transition,to).run();
+    }
 }

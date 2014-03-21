@@ -31,71 +31,7 @@ import java.util.concurrent.TimeUnit;
 public class StateMachineTutorial {
     private static final Logger LOGGER = LoggerFactory.getLogger(StateMachineTutorial.class);
 
-    // *************************************************************************
-    //
-    // *************************************************************************
-
-    /**
-     *
-     * @param map
-     * @throws Exception
-     */
-    public static void stateMachineDemo(final SharedHashMap<Integer, StateMachineData> map) throws Exception {
-        final StateMachineData smd  = map.acquireUsing(0,new StateMachineData());
-        final ExecutorService  esvc = Executors.newFixedThreadPool(3);
-
-        //reset state
-        smd.setStateData(0);
-        smd.setState(StateMachineState.STATE_0);
-
-        esvc.execute(new StateMachineProcessor(
-            smd,StateMachineState.STATE_1,StateMachineState.STATE_1_WORKING,StateMachineState.STATE_2));
-        esvc.execute(new StateMachineProcessor(
-            smd,StateMachineState.STATE_2,StateMachineState.STATE_2_WORKING,StateMachineState.STATE_3));
-        esvc.execute(new StateMachineProcessor(
-            smd,StateMachineState.STATE_3,StateMachineState.STATE_3_WORKING,StateMachineState.STATE_1));
-
-        //fire the first state change
-        smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
-
-        esvc.shutdown();
-        esvc.awaitTermination(10, TimeUnit.SECONDS);
-    }
-
-    // *************************************************************************
-    // Helpers
-    // *************************************************************************
-
-    /**
-     *
-     * @return
-     * @throws Exception
-     */
-    private static SharedHashMap<Integer, StateMachineData> getSharedHashMap() throws Exception {
-        return new SharedHashMapBuilder()
-            .entries(8)
-            .minSegments(128)
-            .entrySize(128)
-            .create(
-                getPersistenceFile(),
-                Integer.class,
-                StateMachineData.class);
-    }
-
-    /**
-     *
-     * @return
-     */
-    private static File getPersistenceFile() {
-        String TMP = System.getProperty("java.io.tmpdir");
-        File file = new File(TMP,"hft-collections-shm-tutorial-sm");
-        //file.delete();
-        //file.deleteOnExit();
-
-        return file;
-    }
-
-    // *************************************************************************
+        // *************************************************************************
     //
     // *************************************************************************
 
@@ -103,11 +39,16 @@ public class StateMachineTutorial {
         SharedHashMap<Integer, StateMachineData> map = null;
 
         try {
-            map = getSharedHashMap();
+            map = new SharedHashMapBuilder()
+                .entries(8)
+                .minSegments(128)
+                .entrySize(128)
+                .create(
+                        new File(System.getProperty("java.io.tmpdir"), "hft-state-machin"),
+                        Integer.class,
+                        StateMachineData.class);
 
-            if(args.length == 0) {
-                StateMachineTutorial.stateMachineDemo(map);
-            } else {
+            if(args.length > 0) {
                 if("0".equals(args[0])) {
                     StateMachineData smd =
                         map.acquireUsing(0, new StateMachineData());
@@ -119,27 +60,29 @@ public class StateMachineTutorial {
                         smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
                     }
                 } else if("1".equals(args[0])) {
-                    new StateMachineProcessor(
+                    StateMachineProcessor.runProcessor(
                         map.acquireUsing(0,new StateMachineData()),
                         StateMachineState.STATE_1,
                         StateMachineState.STATE_1_WORKING,
-                        StateMachineState.STATE_2).run();
+                        StateMachineState.STATE_2);
                 } else if("2".equals(args[0])) {
-                    new StateMachineProcessor(
+                    StateMachineProcessor.runProcessor(
                         map.acquireUsing(0,new StateMachineData()),
                         StateMachineState.STATE_2,
                         StateMachineState.STATE_2_WORKING,
-                        StateMachineState.STATE_3).run();
+                        StateMachineState.STATE_3);
                 } else if("3".equals(args[0])) {
-                    new StateMachineProcessor(
+                    StateMachineProcessor.runProcessor(
                         map.acquireUsing(0,new StateMachineData()),
                         StateMachineState.STATE_3,
                         StateMachineState.STATE_3_WORKING,
-                        StateMachineState.STATE_1).run();
+                        StateMachineState.STATE_1);
                 }
             }
         } finally {
-            map.close();
+            if(map != null) {
+                map.close();
+            }
         }
     }
 }

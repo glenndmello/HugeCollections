@@ -68,12 +68,12 @@ public class StateMachineData implements Byteable {
      * @param from
      * @param to
      */
-    public void setState(StateMachineState from, StateMachineState to) {
+    public boolean setState(StateMachineState from, StateMachineState to) {
         if(this.bytes != null) {
-            while(!this.bytes.compareAndSwapInt(this.offset,from.value(),to.value())) {
-                Thread.yield();
-            }
+            return this.bytes.compareAndSwapInt(this.offset,from.value(),to.value());
         }
+
+        return false;
     }
 
     /**
@@ -96,7 +96,7 @@ public class StateMachineData implements Byteable {
      */
     public void waitForState(StateMachineState from, StateMachineState to) {
         if(this.bytes != null) {
-            while(!this.bytes.compareAndSwapInt(this.offset,from.value(),to.value())) {
+            while(!setState(from,to)) {
                 Thread.yield();
             }
         }
