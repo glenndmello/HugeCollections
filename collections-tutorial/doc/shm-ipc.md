@@ -97,13 +97,22 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
 
     /**
      * Wait for a state and make a transition.
+     * It spins initially (1000 iterations), then uses a Thread.yield() .
      *
      * @param from the state to wait for 
      * @param to the next state
      */
     public void waitForState(StateMachineState from, StateMachineState to) {
         if(this.bytes != null) {
-            while(!setState(from.value(),to.value())) {
+            // spin
+            for(int i=0;i<1000;i++) {
+                if(setState(from,to)) {
+                    return;
+                }
+            }
+
+            // yeld
+            while(!setState(from,to)) {
                 Thread.yield();
             }
         }
