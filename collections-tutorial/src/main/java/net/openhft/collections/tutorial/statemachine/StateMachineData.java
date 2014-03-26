@@ -90,8 +90,8 @@ public class StateMachineData implements Byteable {
     }
 
     /**
-     * Waith for a state transition.
-     * It initially spins (1000 iterations), then uses a Thread.yield()
+     * Wait for a state and make a transition.
+     * It spins initially (1000 iterations), then uses a Thread.yield() .
      *
      * @param from
      * @param to
