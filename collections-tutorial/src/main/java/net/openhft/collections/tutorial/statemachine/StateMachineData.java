@@ -90,12 +90,20 @@ public class StateMachineData implements Byteable {
     }
 
     /**
+     * Waith for a state transition.
+     * It initially spins (1000 iterations), then uses a Thread.yield()
      *
      * @param from
      * @param to
      */
     public void waitForState(StateMachineState from, StateMachineState to) {
         if(this.bytes != null) {
+            for(int i=0;i<1000;i++) {
+                if(setState(from,to)) {
+                    return;
+                }
+            }
+
             while(!setState(from,to)) {
                 Thread.yield();
             }

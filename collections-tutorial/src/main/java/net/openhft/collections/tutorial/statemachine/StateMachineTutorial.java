@@ -21,9 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -44,9 +41,9 @@ public class StateMachineTutorial {
                 .minSegments(128)
                 .entrySize(128)
                 .create(
-                        new File(System.getProperty("java.io.tmpdir"), "hft-state-machin"),
-                        Integer.class,
-                        StateMachineData.class);
+                    new File(System.getProperty("java.io.tmpdir"), "hft-state-machine"),
+                    Integer.class,
+                    StateMachineData.class);
 
             if(args.length > 0) {
                 if("0".equals(args[0])) {
