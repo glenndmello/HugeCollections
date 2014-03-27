@@ -63,9 +63,9 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
      * @param state 
      */
     public void setState(StateMachineState state) {
-        if(this.bytes != null) {
-            this.bytes.writeInt(this.offset,state.value());
-        }
+        if (this.bytes == null) throw new NullPointerException("Byteable is not set to off heap");
+
+        this.bytes.writeInt(this.offset,state.value());
     }
 
     /**
@@ -75,11 +75,9 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
      * @param to the next state
      */
     public boolean setState(StateMachineState from, StateMachineState to) {
-        if(this.bytes != null) {
-            return this.bytes.compareAndSwapInt(this.offset,from.value(),to.value());
-        }
-        
-        return false;
+        if (this.bytes == null) throw new NullPointerException("Byteable is not set to off heap");
+
+        return this.bytes.compareAndSwapInt(this.offset,from.value(),to.value());
     }
 
     /**
@@ -87,11 +85,9 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
      * @return the current state
      */
     public StateMachineState getState() {
-        int value = -1;
-        if(this.bytes != null) {
-            value = this.bytes.readVolatileInt(this.offset);
-        }
-
+        if (this.bytes == null) throw new NullPointerException("Byteable is not set to off heap");
+        
+        int value = this.bytes.readVolatileInt(this.offset);
         return StateMachineState.fromValue(value);
     }
 
@@ -103,17 +99,12 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
      * @param to the next state
      */
     public void waitForState(StateMachineState from, StateMachineState to) {
-        if(this.bytes != null) {
-            // spin
-            for(int i=0;i<1000;i++) {
-                if(setState(from,to)) {
-                    return;
-                }
-            }
+        if (this.bytes == null) throw new NullPointerException("Byteable is not set to off heap");
 
-            // yeld
-            while(!setState(from,to)) {
-                Thread.yield();
+        // spin
+        for(int i = 0; !setState(from, to); i++) {
+            if (i > 1000) {
+                Thread.yield(); // back off a little.
             }
         }
     }
@@ -135,7 +126,7 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
        * @param from
        * @param to
        */
-      public StateMachineProcessor(final StateMachineData smd, StateMachineState from,StateMachineState transition, StateMachineState to) {
+      public StateMachineProcessor(StateMachineData smd, StateMachineState from,StateMachineState transition, StateMachineState to) {
           this.smd = smd;
           this.from = from;
           this.transition = transition;
@@ -143,9 +134,7 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
   
           // Set an informative log name:
           //   STATE_2 => STATE_2_WORKING => STATE_3
-          this.logger = LoggerFactory.getLogger(
-              String.format("%s => %s => %s",from.name(),transition.name(),to.name())
-          );
+          this.logger = LoggerFactory.getLogger(from + " => " +  transition + " => " +  to);
       }
 
       @Override
@@ -190,55 +179,56 @@ OpenHFT SharedHashMap is a blazing fast, persisted, off-heap Java Map which can 
 5. Implement the state machine node 
 
   ```java
-  SharedHashMap<Integer, StateMachineData> map = null;
-
-  try {
-      map = new SharedHashMapBuilder()
+  SharedHashMap<Integer, StateMachineData> map = new SharedHashMapBuilder()
           .entries(8)
-          .minSegments(128)
-          .entrySize(128)
           .create(
-              new File(System.getProperty("java.io.tmpdir"),"hft-state-machin"),
+              new File(System.getProperty("java.io.tmpdir"),"hft-state-machine"),
               Integer.class,
               StateMachineData.class);
 
-      if(args.length == 0) {
-          StateMachineTutorial.stateMachineDemo(map);
-      } else {
-          if("0".equals(args[0])) {
-              StateMachineData smd =
-                  map.acquireUsing(0, new StateMachineData());
+  try {
+      switch(args.length > 0 ? args[0] : "none") {
+        case "0":
+          StateMachineData smd =
+              map.acquireUsing(0, new StateMachineData());
 
-              StateMachineState st = smd.getState();
-              if(st == StateMachineState.STATE_0) {
-                  //fire the first state change
-                  smd.setStateData(0);
-                  smd.setState(StateMachineState.STATE_0,StateMachineState.STATE_1);
-              }
-          } else if("1".equals(args[0])) {
-              StateMachineProcessor.runProcessor(
-                  map.acquireUsing(0,new StateMachineData()),
-                  StateMachineState.STATE_1,
-                  StateMachineState.STATE_1_WORKING,
-                  StateMachineState.STATE_2);
-          } else if("2".equals(args[0])) {
-              StateMachineProcessor.runProcessor(
-                  map.acquireUsing(0,new StateMachineData()),
-                  StateMachineState.STATE_2,
-                  StateMachineState.STATE_2_WORKING,
-                  StateMachineState.STATE_3);
-          } else if("3".equals(args[0])) {
-              StateMachineProcessor.runProcessor(
-                  map.acquireUsing(0,new StateMachineData()),
-                  StateMachineState.STATE_3,
-                  StateMachineState.STATE_3_WORKING,
-                  StateMachineState.STATE_1);
+          StateMachineState st = smd.getState();
+          if(st == StateMachineState.STATE_0) {
+              //fire the first state change
+              smd.setStateData(0);
+              smd.setState(StateMachineState.STATE_0, StateMachineState.STATE_1);
           }
+          break;
+              
+        case "1": 
+          StateMachineProcessor.runProcessor(
+              map.acquireUsing(0,new StateMachineData()),
+              StateMachineState.STATE_1,
+              StateMachineState.STATE_1_WORKING,
+              StateMachineState.STATE_2);
+          break;
+              
+        case "2":
+          StateMachineProcessor.runProcessor(
+              map.acquireUsing(0,new StateMachineData()),
+              StateMachineState.STATE_2,
+              StateMachineState.STATE_2_WORKING,
+              StateMachineState.STATE_3);
+          break;
+              
+        case "3":
+          StateMachineProcessor.runProcessor(
+              map.acquireUsing(0,new StateMachineData()),
+              StateMachineState.STATE_3,
+              StateMachineState.STATE_3_WORKING,
+              StateMachineState.STATE_1);
+          break;
+              
+        default:
+          StateMachineTutorial.stateMachineDemo(map);
       }
   } finally {
-      if(map != null) {
-          map.close();
-      }
+      map.close();
   }
   ```
 
